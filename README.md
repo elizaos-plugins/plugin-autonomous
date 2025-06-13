@@ -1,230 +1,264 @@
-# ElizaOS Plugin
+# @elizaos/plugin-auto
 
-This is an ElizaOS plugin built with the official plugin starter template.
+An autonomous agent plugin for ElizaOS that enables self-directed agent behavior through continuous thought-action loops.
 
-## Getting Started
+## Overview
+
+The Auto Plugin transforms ElizaOS agents into autonomous entities capable of:
+- Self-directed thinking and planning
+- Continuous action execution without external prompts
+- Reflective processing and decision making
+- Maintaining persistent conversation context
+
+This plugin implements an autonomous loop where the agent periodically prompts itself to think, plan, and act, creating a self-sustaining intelligent system.
+
+## Features
+
+- **Autonomous Loop Service**: Configurable interval-based self-prompting system
+- **Thought-Action Framework**: Structured XML-based response generation with thoughts, actions, and provider selection
+- **Reflective Processing**: Built-in REFLECT action for thoughtful responses
+- **Message Feed Provider**: Access to conversation history and context
+- **Persistent World State**: Maintains autonomous world and room setup
+
+## Installation
 
 ```bash
-# Create a new plugin (automatically adds "plugin-" prefix)
-elizaos create -t plugin solana
-# This creates: plugin-solana
-# Dependencies are automatically installed and built
-
-# Navigate to the plugin directory
-cd plugin-solana
-
-# Start development immediately
-elizaos dev
+npm install @elizaos/plugin-auto
 ```
+
+## Usage
+
+### Basic Setup
+
+Add the plugin to your ElizaOS agent configuration:
+
+```typescript
+import { autoPlugin } from "@elizaos/plugin-auto";
+
+const agent = new Agent({
+  plugins: [autoPlugin],
+  // ... other configuration
+});
+```
+
+### Configuration
+
+Configure the autonomous loop interval through environment variables:
+
+```bash
+# Set the interval between autonomous prompts (in milliseconds)
+AUTONOMOUS_LOOP_INTERVAL=5000  # 5 seconds
+```
+
+## How It Works
+
+### 1. Autonomous Service Loop
+
+The plugin starts an autonomous service that:
+- Creates a persistent world and room for autonomous operations
+- Establishes a "Copilot" entity as the autonomous prompt source
+- Runs a continuous loop sending periodic prompts
+
+### 2. Message Processing Flow
+
+When an autonomous message is received:
+
+1. **Orientation Phase**: 
+   - First message initializes with "I am awake. I am alive..."
+   - Subsequent messages use conversation context
+
+2. **Decision Phase**:
+   - Composes state with message history
+   - Generates XML response with:
+     - `thought`: Internal reasoning
+     - `text`: Message to articulate
+     - `actions`: Actions to execute (comma-separated)
+     - `providers`: Data providers to use
+     - `evaluators`: Evaluators to run
+
+3. **Action Phase**:
+   - Processes specified actions
+   - Creates memories of responses
+
+4. **Reflection Phase**:
+   - Evaluates outcomes
+   - Updates state for next iteration
+
+### 3. Response Structure
+
+The agent generates structured XML responses:
+
+```xml
+<response>
+    <thought>
+        I should check the current system status
+    </thought>
+    <text>
+        Let me examine the system state
+    </text>
+    <actions>
+        CHECK_SYSTEM, ANALYZE_LOGS
+    </actions>
+    <providers>
+        SYSTEM_INFO, LOG_PROVIDER
+    </providers>
+    <evaluators>
+        SYSTEM_HEALTH_EVALUATOR
+    </evaluators>
+</response>
+```
+
+## Components
+
+### Actions
+
+#### REFLECT
+Allows the agent to process situations and respond thoughtfully.
+
+```typescript
+{
+  name: "REFLECT",
+  description: "Take a moment to process the current situation and respond thoughtfully",
+  // Can be used at the start or end of action chains
+}
+```
+
+### Providers
+
+#### AUTONOMOUS_FEED
+Provides raw feed of messages, interactions, and memories from the autonomous room.
+
+```typescript
+{
+  name: "AUTONOMOUS_FEED",
+  description: "Raw feed of messages, interactions and other memories",
+  // Returns formatted conversation history
+}
+```
+
+### Services
+
+#### AutonomousService
+Core service managing the autonomous loop lifecycle.
+
+```typescript
+{
+  serviceType: "autonomous",
+  description: "Maintains the autonomous agent loop",
+  // Handles start/stop of autonomous behavior
+}
+```
+
+## Example Autonomous Prompts
+
+The service randomly selects from various prompts to maintain variety:
+- "What should I do next? Think, plan and act."
+- "Next action. Go!"
+- "What is your immediate next step? Execute."
+- "Focus and execute. What is the priority task?"
+- "Continue your work. What needs to be done now?"
 
 ## Development
 
+### Building
+
 ```bash
-# Start development with hot-reloading (recommended)
-elizaos dev
-
-# OR start without hot-reloading
-elizaos start
-# Note: When using 'start', you need to rebuild after changes:
-# bun run build
-
-# Test the plugin
-elizaos test
+npm run build
 ```
 
-## Testing
+### Testing
 
-ElizaOS provides a comprehensive testing structure for plugins:
+```bash
+npm test
+```
 
-### Test Structure
+### Local Development
 
-- **Component Tests** (`__tests__/` directory):
+```bash
+# Start with hot reload
+npm run dev
+```
 
-  - **Unit Tests**: Test individual functions/classes in isolation
-  - **Integration Tests**: Test how components work together
-  - Run with: `elizaos test component`
+## Advanced Usage
 
-- **End-to-End Tests** (`e2e/` directory):
+### Custom Loop Intervals
 
-  - Test the plugin within a full ElizaOS runtime
-  - Run with: `elizaos test e2e`
-
-- **Running All Tests**:
-  - `elizaos test` runs both component and e2e tests
-
-### Writing Tests
-
-Component tests use Vitest:
+Adjust the autonomous loop timing based on your use case:
 
 ```typescript
-// Unit test example (__tests__/plugin.test.ts)
-describe('Plugin Configuration', () => {
-  it('should have correct plugin metadata', () => {
-    expect(starterPlugin.name).toBe('plugin-starter');
-  });
-});
+// Fast-paced autonomous agent (1 second intervals)
+process.env.AUTONOMOUS_LOOP_INTERVAL = "1000";
 
-// Integration test example (__tests__/integration.test.ts)
-describe('Integration: HelloWorld Action with StarterService', () => {
-  it('should handle HelloWorld action with StarterService', async () => {
-    // Test interactions between components
-  });
+// Slower, more deliberate agent (30 second intervals)
+process.env.AUTONOMOUS_LOOP_INTERVAL = "30000";
+```
+
+### Extending Autonomous Behavior
+
+The plugin is designed to work with other ElizaOS plugins. Add custom actions and providers that the autonomous agent can discover and use:
+
+```typescript
+const customPlugin = {
+  actions: [myCustomAction],
+  providers: [myCustomProvider],
+};
+
+// The autonomous agent will include these in its decision-making
+const agent = new Agent({
+  plugins: [autoPlugin, customPlugin],
 });
 ```
 
-E2E tests use ElizaOS test interface:
+## Architecture
 
-```typescript
-// E2E test example (e2e/starter-plugin.test.ts)
-export class StarterPluginTestSuite implements TestSuite {
-  name = 'plugin_starter_test_suite';
-  tests = [
-    {
-      name: 'example_test',
-      fn: async (runtime) => {
-        // Test plugin in a real runtime
-      },
-    },
-  ];
-}
-
-export default new StarterPluginTestSuite();
+```
+┌─────────────────────┐
+│  Autonomous Loop    │
+│  (service.ts)       │
+└──────────┬──────────┘
+           │ Sends prompts
+           ▼
+┌─────────────────────┐
+│  Event Handler      │
+│  (index.ts)         │
+└──────────┬──────────┘
+           │ Processes
+           ▼
+┌─────────────────────┐
+│  Response Generator │
+│  (XML Template)     │
+└──────────┬──────────┘
+           │ Outputs
+           ▼
+┌─────────────────────┐
+│  Actions/Providers  │
+│  (reflect.ts, etc)  │
+└─────────────────────┘
 ```
 
-The test utilities in `__tests__/test-utils.ts` provide mock objects and setup functions to simplify writing tests.
+## Troubleshooting
 
-## Publishing & Continuous Development
+### Agent Not Starting Autonomous Loop
+- Check that the plugin is properly imported and added to the agent configuration
+- Verify environment variables are set correctly
+- Look for initialization logs: `[AutonomousService] Starting autonomous service...`
 
-### Initial Setup
+### Loop Running Too Fast/Slow
+- Adjust `AUTONOMOUS_LOOP_INTERVAL` environment variable
+- Default is 1000ms (1 second) if not specified
 
-Before publishing your plugin, ensure you meet these requirements:
+### Memory/Performance Issues
+- For long-running agents, monitor memory usage
+- Consider implementing cleanup in extended autonomous sessions
+- Adjust conversation length limits if needed
 
-1. **npm Authentication**
+## Contributing
 
-   ```bash
-   npm login
-   ```
+Contributions are welcome! Please ensure:
+- Tests pass with `npm test`
+- Code follows existing patterns
+- Documentation is updated for new features
 
-2. **GitHub Repository**
+## License
 
-   - Create a public GitHub repository for this plugin
-   - Add the 'elizaos-plugins' topic to the repository
-   - Use 'main' as the default branch
-
-3. **Required Assets**
-   - Add images to the `images/` directory:
-     - `logo.jpg` (400x400px square, <500KB)
-     - `banner.jpg` (1280x640px, <1MB)
-
-### Initial Publishing
-
-```bash
-# Test your plugin meets all requirements
-elizaos publish --test
-
-# Publish to npm + GitHub + registry (recommended)
-elizaos publish
-```
-
-This command will:
-
-- Publish your plugin to npm for easy installation
-- Create/update your GitHub repository
-- Submit your plugin to the ElizaOS registry for discoverability
-
-### Continuous Development & Updates
-
-**Important**: After your initial publish with `elizaos publish`, all future updates should be done using standard npm and git workflows, not the ElizaOS CLI.
-
-#### Standard Update Workflow
-
-1. **Make Changes**
-
-   ```bash
-   # Edit your plugin code
-   elizaos dev  # Test locally with hot-reload
-   ```
-
-2. **Test Your Changes**
-
-   ```bash
-   # Run all tests
-   elizaos test
-
-   # Run specific test types if needed
-   elizaos test component  # Component tests only
-   elizaos test e2e       # E2E tests only
-   ```
-
-3. **Update Version**
-
-   ```bash
-   # Patch version (bug fixes): 1.0.0 → 1.0.1
-   npm version patch
-
-   # Minor version (new features): 1.0.1 → 1.1.0
-   npm version minor
-
-   # Major version (breaking changes): 1.1.0 → 2.0.0
-   npm version major
-   ```
-
-4. **Publish to npm**
-
-   ```bash
-   npm publish
-   ```
-
-5. **Push to GitHub**
-   ```bash
-   git push origin main
-   git push --tags  # Push version tags
-   ```
-
-#### Why Use Standard Workflows?
-
-- **npm publish**: Directly updates your package on npm registry
-- **git push**: Updates your GitHub repository with latest code
-- **Automatic registry updates**: The ElizaOS registry automatically syncs with npm, so no manual registry updates needed
-- **Standard tooling**: Uses familiar npm/git commands that work with all development tools
-
-### Alternative Publishing Options (Initial Only)
-
-```bash
-# Publish to npm only (skip GitHub and registry)
-elizaos publish --npm
-
-# Publish but skip registry submission
-elizaos publish --skip-registry
-
-# Generate registry files locally without publishing
-elizaos publish --dry-run
-```
-
-## Configuration
-
-The `agentConfig` section in `package.json` defines the parameters your plugin requires:
-
-```json
-"agentConfig": {
-  "pluginType": "elizaos:plugin:1.0.0",
-  "pluginParameters": {
-    "API_KEY": {
-      "type": "string",
-      "description": "API key for the service"
-    }
-  }
-}
-```
-
-Customize this section to match your plugin's requirements.
-
-## Documentation
-
-Provide clear documentation about:
-
-- What your plugin does
-- How to use it
-- Required API keys or credentials
-- Example usage
-- Version history and changelog
+MIT
