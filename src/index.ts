@@ -13,6 +13,21 @@ import AutonomousService from "./service.ts";
 import "./types.ts"; // Ensure module augmentation is loaded
 import { autonomousFeedProvider } from "./messageFeed.ts";
 import { reflectAction } from "./reflect.ts";
+import { scenarioTests } from "./scenarios/tests/index.ts";
+
+// Import scenario actions and providers
+import {
+  documentationResearchProvider,
+  startDocumentationResearchAction,
+  checkResearchProgressAction,
+  githubAnalysisProvider,
+  startGithubAnalysisAction,
+  analyzeSpecificRepoAction,
+  systemHealthProvider,
+  systemHealthCheckAction,
+  learningPathProvider,
+  startLearningPathAction,
+} from "./scenarios/index.ts";
 
 // Declare environment variables for autonomous service configuration
 declare global {
@@ -85,6 +100,7 @@ Your response must ONLY include the <response></response> XML block.
 export const autoPlugin: Plugin = {
   name: "auto",
   description: "Auto plugin",
+  tests: scenarioTests,
   events: {
     [EventType.AUTO_MESSAGE_RECEIVED]: [
       async (payload: MessagePayload) => {
@@ -228,9 +244,25 @@ export const autoPlugin: Plugin = {
       },
     ],
   },
-  actions: [reflectAction],
+  actions: [
+    reflectAction,
+    // Include scenario actions
+    startDocumentationResearchAction,
+    checkResearchProgressAction,
+    startGithubAnalysisAction,
+    analyzeSpecificRepoAction,
+    systemHealthCheckAction,
+    startLearningPathAction,
+  ],
   services: [AutonomousService],
-  providers: [autonomousFeedProvider],
+  providers: [
+    autonomousFeedProvider,
+    // Include scenario providers
+    documentationResearchProvider,
+    githubAnalysisProvider,
+    systemHealthProvider,
+    learningPathProvider,
+  ],
 };
 
 export default autoPlugin;

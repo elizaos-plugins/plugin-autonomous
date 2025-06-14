@@ -209,6 +209,92 @@ const agent = new Agent({
 });
 ```
 
+## Real-World Scenarios
+
+The plugin includes pre-built scenarios that demonstrate the autonomous agent's capabilities when combined with shell, browserbase, and todo plugins:
+
+### 1. Documentation Research
+The agent can research technical topics, browse documentation sites, and create comprehensive reports.
+
+**Example Usage:**
+```
+"Research documentation on ElizaOS plugin development"
+"Research the TypeScript compiler API and create a comprehensive guide"
+```
+
+**Capabilities:**
+- Browses multiple documentation sources
+- Extracts key information
+- Creates structured markdown reports
+- Tracks research progress with TODOs
+
+### 2. GitHub Repository Analysis
+The agent analyzes trending repositories or specific projects, examining code structure and best practices.
+
+**Example Usage:**
+```
+"Analyze trending GitHub repositories in TypeScript"
+"Analyze repository https://github.com/microsoft/TypeScript"
+```
+
+**Capabilities:**
+- Browses GitHub trending pages
+- Clones repositories locally
+- Analyzes project structure
+- Creates detailed analysis reports
+
+### 3. System Health Monitoring
+The agent performs system health checks and creates maintenance tasks for issues.
+
+**Example Usage:**
+```
+"Check system health status"
+"Perform comprehensive system health check with recommendations"
+```
+
+**Capabilities:**
+- Monitors disk, memory, and CPU usage
+- Identifies resource bottlenecks
+- Creates cleanup tasks when needed
+- Generates health reports
+
+### 4. Learning Path Execution
+The agent follows programming tutorials, executes examples, and tracks learning progress.
+
+**Example Usage:**
+```
+"Learn React programming tutorial"
+"Study TypeScript programming basics"
+```
+
+**Capabilities:**
+- Follows online tutorials step-by-step
+- Executes code examples locally
+- Takes notes on key concepts
+- Tracks progress with learning milestones
+
+### Using Scenarios
+
+To enable scenarios in your autonomous agent:
+
+```typescript
+import { autoPlugin } from "@elizaos/plugin-auto";
+import { scenariosPlugin } from "@elizaos/plugin-auto/scenarios";
+import { shellPlugin } from "@elizaos/plugin-shell";
+import { browserbasePlugin } from "@elizaos/plugin-browserbase";
+import { todoPlugin } from "@elizaos/plugin-todo";
+
+const agent = new Agent({
+  plugins: [
+    autoPlugin,
+    scenariosPlugin,
+    shellPlugin,
+    browserbasePlugin,
+    todoPlugin
+  ],
+});
+```
+
 ## Architecture
 
 ```

@@ -1,12 +1,12 @@
-import { describe, expect, it, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
-import { starterPlugin, StarterService } from '../src/index';
-import { ModelType, logger } from '@elizaos/core';
+import { describe, expect, it, vi, beforeAll, afterAll } from 'vitest';
+import { autoPlugin } from '../src/index';
+import { logger } from '@elizaos/core';
 import dotenv from 'dotenv';
 
 // Setup environment variables
 dotenv.config();
 
-// Need to spy on logger for documentation
+// Spy on logger for testing
 beforeAll(() => {
   vi.spyOn(logger, 'info');
   vi.spyOn(logger, 'error');
@@ -18,165 +18,111 @@ afterAll(() => {
   vi.restoreAllMocks();
 });
 
-// Create a real runtime for testing
-function createRealRuntime() {
-  const services = new Map();
-
-  // Create a real service instance if needed
-  const createService = (serviceType: string) => {
-    if (serviceType === StarterService.serviceType) {
-      return new StarterService({
-        character: {
-          name: 'Test Character',
-          system: 'You are a helpful assistant for testing.',
-        },
-      } as any);
-    }
-    return null;
-  };
-
-  return {
-    character: {
-      name: 'Test Character',
-      system: 'You are a helpful assistant for testing.',
-      plugins: [],
-      settings: {},
-    },
-    getSetting: (key: string) => null,
-    models: starterPlugin.models,
-    db: {
-      get: async (key: string) => null,
-      set: async (key: string, value: any) => true,
-      delete: async (key: string) => true,
-      getKeys: async (pattern: string) => [],
-    },
-    getService: (serviceType: string) => {
-      // Log the service request for debugging
-      logger.debug(`Requesting service: ${serviceType}`);
-
-      // Get from cache or create new
-      if (!services.has(serviceType)) {
-        logger.debug(`Creating new service: ${serviceType}`);
-        services.set(serviceType, createService(serviceType));
-      }
-
-      return services.get(serviceType);
-    },
-    registerService: (serviceType: string, service: any) => {
-      logger.debug(`Registering service: ${serviceType}`);
-      services.set(serviceType, service);
-    },
-  };
-}
-
-describe('Plugin Configuration', () => {
+describe('Auto Plugin Configuration', () => {
   it('should have correct plugin metadata', () => {
-    expect(starterPlugin.name).toBe('plugin-starter');
-    expect(starterPlugin.description).toBe('Plugin starter for elizaOS');
-    expect(starterPlugin.config).toBeDefined();
+    expect(autoPlugin.name).toBe('auto');
+    expect(autoPlugin.description).toBe('Auto plugin');
+    expect(autoPlugin.tests).toBeDefined();
   });
 
-  it('should include the EXAMPLE_PLUGIN_VARIABLE in config', () => {
-    expect(starterPlugin.config).toHaveProperty('EXAMPLE_PLUGIN_VARIABLE');
+  it('should have autonomous event handlers', () => {
+    expect(autoPlugin.events).toBeDefined();
+    expect(autoPlugin.events?.['auto_message_received']).toBeDefined();
+    expect(Array.isArray(autoPlugin.events?.['auto_message_received'])).toBe(true);
   });
 
-  it('should initialize properly', async () => {
-    const originalEnv = process.env.EXAMPLE_PLUGIN_VARIABLE;
-
-    try {
-      process.env.EXAMPLE_PLUGIN_VARIABLE = 'test-value';
-
-      // Initialize with config - using real runtime
-      const runtime = createRealRuntime();
-
-      if (starterPlugin.init) {
-        await starterPlugin.init({ EXAMPLE_PLUGIN_VARIABLE: 'test-value' }, runtime as any);
-        expect(true).toBe(true); // If we got here, init succeeded
-      }
-    } finally {
-      process.env.EXAMPLE_PLUGIN_VARIABLE = originalEnv;
-    }
+  it('should have the REFLECT action', () => {
+    expect(autoPlugin.actions).toBeDefined();
+    expect(autoPlugin.actions?.length).toBeGreaterThan(0);
+    const reflectAction = autoPlugin.actions?.find(a => a.name === 'REFLECT');
+    expect(reflectAction).toBeDefined();
   });
 
-  it('should have a valid config', () => {
-    expect(starterPlugin.config).toBeDefined();
-    if (starterPlugin.config) {
-      // Check if the config has expected EXAMPLE_PLUGIN_VARIABLE property
-      expect(Object.keys(starterPlugin.config)).toContain('EXAMPLE_PLUGIN_VARIABLE');
-    }
+  it('should have scenario actions', () => {
+    const expectedActions = [
+      'START_DOCUMENTATION_RESEARCH',
+      'CHECK_RESEARCH_PROGRESS',
+      'START_GITHUB_ANALYSIS',
+      'ANALYZE_SPECIFIC_REPO',
+      'SYSTEM_HEALTH_CHECK',
+      'START_LEARNING_PATH'
+    ];
+
+    expectedActions.forEach(actionName => {
+      const action = autoPlugin.actions?.find(a => a.name === actionName);
+      expect(action).toBeDefined();
+    });
+  });
+
+  it('should have the autonomous feed provider', () => {
+    expect(autoPlugin.providers).toBeDefined();
+    expect(autoPlugin.providers?.length).toBeGreaterThan(0);
+    const feedProvider = autoPlugin.providers?.find(p => p.name === 'AUTONOMOUS_FEED');
+    expect(feedProvider).toBeDefined();
+  });
+
+  it('should have scenario providers', () => {
+    const expectedProviders = [
+      'DOCUMENTATION_RESEARCH_CONTEXT',
+      'GITHUB_ANALYSIS_CONTEXT',
+      'SYSTEM_HEALTH_CONTEXT',
+      'LEARNING_PATH_CONTEXT'
+    ];
+
+    expectedProviders.forEach(providerName => {
+      const provider = autoPlugin.providers?.find(p => p.name === providerName);
+      expect(provider).toBeDefined();
+    });
+  });
+
+  it('should have the AutonomousService', () => {
+    expect(autoPlugin.services).toBeDefined();
+    expect(autoPlugin.services?.length).toBeGreaterThan(0);
+    expect(autoPlugin.services?.[0].serviceType).toBe('autonomous');
+  });
+
+  it('should have e2e tests exported', () => {
+    expect(autoPlugin.tests).toBeDefined();
+    expect(Array.isArray(autoPlugin.tests)).toBe(true);
+    expect(autoPlugin.tests?.length).toBeGreaterThan(0);
+    
+    const testSuite = autoPlugin.tests?.[0];
+    expect(testSuite?.name).toBe('Autonomous Agent Scenarios E2E Tests');
+    expect(testSuite?.tests?.length).toBe(5);
   });
 });
 
-describe('Plugin Models', () => {
-  it('should have TEXT_SMALL model defined', () => {
-    expect(starterPlugin.models?.[ModelType.TEXT_SMALL]).toBeDefined();
-    if (starterPlugin.models) {
-      expect(typeof starterPlugin.models[ModelType.TEXT_SMALL]).toBe('function');
-    }
+describe('Auto Plugin Actions', () => {
+  it('should have valid REFLECT action structure', () => {
+    const reflectAction = autoPlugin.actions?.find(a => a.name === 'REFLECT');
+    expect(reflectAction).toBeDefined();
+    expect(reflectAction?.description).toContain('process the current situation');
+    expect(reflectAction?.validate).toBeDefined();
+    expect(reflectAction?.handler).toBeDefined();
+    expect(reflectAction?.examples).toBeDefined();
   });
 
-  it('should have TEXT_LARGE model defined', () => {
-    expect(starterPlugin.models?.[ModelType.TEXT_LARGE]).toBeDefined();
-    if (starterPlugin.models) {
-      expect(typeof starterPlugin.models[ModelType.TEXT_LARGE]).toBe('function');
-    }
-  });
-
-  it('should return a response from TEXT_SMALL model', async () => {
-    if (starterPlugin.models?.[ModelType.TEXT_SMALL]) {
-      const runtime = createRealRuntime();
-      const result = await starterPlugin.models[ModelType.TEXT_SMALL](runtime as any, {
-        prompt: 'test',
-      });
-
-      // Check that we get a non-empty string response
-      expect(result).toBeTruthy();
-      expect(typeof result).toBe('string');
-      expect(result.length).toBeGreaterThan(10);
-    }
+  it('should have valid documentation research action', () => {
+    const action = autoPlugin.actions?.find(a => a.name === 'START_DOCUMENTATION_RESEARCH');
+    expect(action).toBeDefined();
+    expect(action?.description).toContain('documentation research');
+    expect(action?.validate).toBeDefined();
+    expect(action?.handler).toBeDefined();
   });
 });
 
-describe('StarterService', () => {
-  it('should start the service', async () => {
-    const runtime = createRealRuntime();
-    const startResult = await StarterService.start(runtime as any);
-
-    expect(startResult).toBeDefined();
-    expect(startResult.constructor.name).toBe('StarterService');
-
-    // Test real functionality - check stop method is available
-    expect(typeof startResult.stop).toBe('function');
+describe('Auto Plugin Providers', () => {
+  it('should have valid autonomous feed provider structure', () => {
+    const provider = autoPlugin.providers?.find(p => p.name === 'AUTONOMOUS_FEED');
+    expect(provider).toBeDefined();
+    expect(provider?.description).toContain('Raw feed of messages');
+    expect(provider?.get).toBeDefined();
   });
 
-  it('should stop the service', async () => {
-    const runtime = createRealRuntime();
-
-    // Register a real service first
-    const service = new StarterService(runtime as any);
-    runtime.registerService(StarterService.serviceType, service);
-
-    // Spy on the real service's stop method
-    const stopSpy = vi.spyOn(service, 'stop');
-
-    // Call the static stop method
-    await StarterService.stop(runtime as any);
-
-    // Verify the service's stop method was called
-    expect(stopSpy).toHaveBeenCalled();
-  });
-
-  it('should throw an error when stopping a non-existent service', async () => {
-    const runtime = createRealRuntime();
-    // Don't register a service, so getService will return null
-
-    // We'll patch the getService function to ensure it returns null
-    const originalGetService = runtime.getService;
-    runtime.getService = () => null;
-
-    await expect(StarterService.stop(runtime as any)).rejects.toThrow('Starter service not found');
-
-    // Restore original getService function
-    runtime.getService = originalGetService;
+  it('should have valid scenario context providers', () => {
+    const provider = autoPlugin.providers?.find(p => p.name === 'DOCUMENTATION_RESEARCH_CONTEXT');
+    expect(provider).toBeDefined();
+    expect(provider?.description).toContain('documentation research');
+    expect(provider?.get).toBeDefined();
   });
 });

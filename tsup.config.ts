@@ -1,7 +1,11 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: [
+    'src/index.ts',
+    'src/scenarios/index.ts',
+    'src/scenarios/**/*.ts'
+  ],
   outDir: 'dist',
   tsconfig: './tsconfig.build.json', // Use build-specific tsconfig
   sourcemap: true,
