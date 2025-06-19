@@ -1,6 +1,8 @@
 import { addHeader, createUniqueUuid } from '@elizaos/core';
 
-import type { IAgentRuntime, Memory, Provider, UUID } from '@elizaos/core';
+import type { IAgentRuntime, Memory, Provider, UUID, State, ProviderResult } from '@elizaos/core';
+import { OODALoopService } from './ooda-service';
+import { AutonomousServiceType } from './types';
 
 const AUTO_WORLD_SEED = 'autonomous_world_singleton';
 const AUTO_ROOM_SEED = 'autonomous_room_singleton';
@@ -34,10 +36,19 @@ export const autonomousWorldProvider: Provider = {
       }
 
       // Get world and room information
-      const [world, room] = await Promise.all([
-        runtime.getWorld(worldId),
-        runtime.getRoom(autonomousRoomId),
-      ]);
+      let world = null;
+      let room = null;
+
+      try {
+        if (typeof runtime.getWorld === 'function') {
+          world = await runtime.getWorld(worldId);
+        }
+        if (typeof runtime.getRoom === 'function') {
+          room = await runtime.getRoom(autonomousRoomId);
+        }
+      } catch (error) {
+        console.error('Error in world provider:', error);
+      }
 
       const worldInfo = world
         ? {
@@ -112,3 +123,150 @@ export const autonomousWorldProvider: Provider = {
     }
   },
 };
+
+export const worldProvider: Provider = {
+  name: 'AUTONOMOUS_WORLD_CONTEXT',
+  description: 'Provides dynamic context about the autonomous world and OODA loop state',
+  dynamic: true,
+  position: 1,
+  get: async (runtime: IAgentRuntime, message: Memory, state: State): Promise<ProviderResult> => {
+    try {
+      // Get the OODA service
+      let oodaService: OODALoopService | null = null;
+
+      if (typeof runtime.getService === 'function') {
+        oodaService = runtime.getService(
+          AutonomousServiceType.AUTONOMOUS
+        ) as OODALoopService | null;
+      }
+
+      if (!oodaService) {
+        return {
+          text: 'Autonomous OODA loop service is not active.',
+          values: {
+            autonomousActive: false,
+          },
+        };
+      }
+
+      // Get current context from the service
+      const context = (oodaService as any).currentContext;
+      const goals = (oodaService as any).goals || [];
+
+      if (!context) {
+        return {
+          text: 'OODA loop is running but no active context available.',
+          values: {
+            autonomousActive: true,
+            oodaRunning: true,
+            contextAvailable: false,
+          },
+        };
+      }
+
+      // Calculate key metrics
+      const observationCount = context.observations?.length || 0;
+      const recentObservations = context.observations?.slice(-3) || [];
+      const actionCount = context.actions?.length || 0;
+      const runningActions =
+        context.actions?.filter((a: any) => a.status === 'running').length || 0;
+      const errorCount = context.errors?.length || 0;
+
+      // Build dynamic context text
+      const contextParts = [
+        `Current OODA Phase: ${context.phase}`,
+        `Run ID: ${context.runId}`,
+        `Active for: ${formatDuration(Date.now() - context.startTime)}`,
+        '',
+        'System Status:',
+        `- ${observationCount} observations collected`,
+        `- ${actionCount} actions executed (${runningActions} running)`,
+        `- ${errorCount} errors encountered`,
+      ];
+
+      if (context.orientation?.resourceStatus) {
+        const rs = context.orientation.resourceStatus;
+        contextParts.push(
+          '',
+          'Resource Usage:',
+          `- CPU: ${rs.cpu}%`,
+          `- Memory: ${rs.memory}%`,
+          `- Task Slots: ${rs.taskSlots.used}/${rs.taskSlots.total}`
+        );
+      }
+
+      if (goals.length > 0) {
+        contextParts.push('', 'Active Goals:');
+        goals.forEach((goal: any) => {
+          contextParts.push(
+            `- ${goal.description} (Progress: ${(goal.progress * 100).toFixed(0)}%)`
+          );
+        });
+      }
+
+      if (recentObservations.length > 0) {
+        contextParts.push('', 'Recent Observations:');
+        recentObservations.forEach((obs: any) => {
+          contextParts.push(
+            `- ${obs.type} from ${obs.source} (relevance: ${(obs.relevance * 100).toFixed(0)}%)`
+          );
+        });
+      }
+
+      if (context.metrics) {
+        const m = context.metrics;
+        contextParts.push(
+          '',
+          'Performance Metrics:',
+          `- Cycle Time: ${formatDuration(m.cycleTime)}`,
+          `- Success Rate: ${(m.actionSuccessRate * 100).toFixed(1)}%`,
+          `- Error Rate: ${(m.errorRate * 100).toFixed(1)}%`,
+          `- Resource Efficiency: ${(m.resourceEfficiency * 100).toFixed(1)}%`
+        );
+      }
+
+      return {
+        text: contextParts.join('\n'),
+        values: {
+          autonomousActive: true,
+          oodaRunning: true,
+          currentPhase: context.phase,
+          runId: context.runId,
+          uptime: Date.now() - context.startTime,
+          observationCount,
+          actionCount,
+          runningActions,
+          errorCount,
+          goals: goals.map((g: any) => ({
+            description: g.description,
+            progress: g.progress,
+            priority: g.priority,
+          })),
+          resourceStatus: context.orientation?.resourceStatus,
+          metrics: context.metrics,
+          recentObservations,
+          environmentalFactors: context.orientation?.environmentalFactors || [],
+        },
+        data: {
+          fullContext: context,
+        },
+      };
+    } catch (error) {
+      console.error('Error in AUTONOMOUS_WORLD_CONTEXT provider:', error);
+      return {
+        text: 'Failed to retrieve autonomous world context.',
+        values: {
+          autonomousActive: false,
+          error: (error as Error).message,
+        },
+      };
+    }
+  },
+};
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 3600000) return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+  return `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`;
+}

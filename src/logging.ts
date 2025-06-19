@@ -20,7 +20,9 @@ export class AutonomyLogger {
   private currentRunId: string | null = null;
   private fileStream: WriteStream | null = null;
   private logBuffer: LogEntry[] = [];
+  private recentLogs: LogEntry[] = []; // Keep recent logs for querying
   private flushInterval: NodeJS.Timeout | null = null;
+  private static instance: AutonomyLogger | null = null;
 
   constructor(runtime: IAgentRuntime, config?: Partial<LoggerConfig>) {
     this.runtime = runtime;
@@ -171,6 +173,12 @@ export class AutonomyLogger {
     const entries = [...this.logBuffer];
     this.logBuffer = [];
 
+    // Add to recent logs (keep last 1000)
+    this.recentLogs.push(...entries);
+    if (this.recentLogs.length > 1000) {
+      this.recentLogs = this.recentLogs.slice(-1000);
+    }
+
     for (const entry of entries) {
       const formatted = this.formatMessage(entry);
 
@@ -261,6 +269,36 @@ export class AutonomyLogger {
     this.error(`Error in ${context.phase || 'unknown'} phase`, error, context);
   }
 
+  // Query logs
+  async queryLogs(params: {
+    runId?: string;
+    phase?: OODAPhase;
+    level?: LogLevel;
+    limit?: number;
+  }): Promise<LogEntry[]> {
+    // For now, return from recent logs
+    // In production, this would query from persistent storage
+    let results = [...this.recentLogs, ...this.logBuffer];
+
+    if (params.runId) {
+      results = results.filter((log) => log.runId === params.runId);
+    }
+
+    if (params.phase) {
+      results = results.filter((log) => log.phase === params.phase);
+    }
+
+    if (params.level) {
+      results = results.filter((log) => log.level === params.level);
+    }
+
+    if (params.limit) {
+      results = results.slice(-params.limit);
+    }
+
+    return results;
+  }
+
   // Cleanup
   async destroy(): Promise<void> {
     if (this.flushInterval) {
@@ -272,6 +310,11 @@ export class AutonomyLogger {
     if (this.fileStream) {
       this.fileStream.end();
     }
+  }
+
+  // Method to reset singleton (for testing)
+  static reset() {
+    AutonomyLogger.instance = null;
   }
 }
 

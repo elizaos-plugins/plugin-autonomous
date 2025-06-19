@@ -75,60 +75,50 @@ export class OODALoopService extends Service {
   }
 
   private async initializeAutonomousEnvironment() {
-    try {
-      // Create or get autonomous world
-      const worldName = `autonomous-world-${this.runtime.agentId}`;
-      let world = await this.runtime.getWorld(asUUID(worldName));
+    // For autonomous operations, we don't need persistent rooms/worlds
+    // Just use consistent UUIDs for this session
+    this.autonomousWorldId = asUUID(`00000000-0000-0000-0000-000000000001`);
+    this.autonomousRoomId = asUUID(`00000000-0000-0000-0000-000000000002`);
 
-      if (!world) {
-        // Create the autonomous world
-        world = {
-          id: createUniqueUuid(this.runtime, worldName),
-          name: worldName,
+    // Try to create the world and room if they don't exist (only in environments that support it)
+    if (
+      typeof this.runtime.createWorld === 'function' &&
+      typeof this.runtime.createRoom === 'function'
+    ) {
+      try {
+        // Create autonomous world
+        await this.runtime.createWorld({
+          id: this.autonomousWorldId,
+          name: 'Autonomous World',
           agentId: this.runtime.agentId,
           serverId: 'autonomous',
           metadata: {
-            description: 'Autonomous operations world for OODA loop',
-            createdBy: 'ooda-service',
+            description: 'World for autonomous agent operations',
           },
-        };
-        await this.runtime.createWorld(world);
-      }
+        });
 
-      this.autonomousWorldId = world.id;
-      this.logger.info('Autonomous world initialized', { worldId: world.id });
-
-      // Create or get autonomous room
-      const roomName = `autonomous-room-${this.runtime.agentId}`;
-      const roomId = asUUID(createUniqueUuid(this.runtime, roomName));
-      let room = await this.runtime.getRoom(roomId);
-
-      if (!room) {
-        // Create the autonomous room
-        const roomId = createUniqueUuid(this.runtime, roomName);
-        room = {
-          id: roomId,
-          name: roomName,
+        // Create autonomous room
+        await this.runtime.createRoom({
+          id: this.autonomousRoomId,
+          name: 'Autonomous Operations',
           agentId: this.runtime.agentId,
           source: 'autonomous',
-          type: 'SELF' as any, // Using SELF type for autonomous operations
-          worldId: world.id,
+          type: 'SELF' as any,
+          worldId: this.autonomousWorldId,
           metadata: {
-            description: 'Autonomous operations room for OODA loop',
-            createdBy: 'ooda-service',
+            description: 'Room for autonomous agent thoughts and actions',
           },
-        };
-        await this.runtime.createRoom(room);
+        });
+      } catch (error) {
+        // Rooms/worlds might already exist or creation might fail in test environment
+        this.logger.debug('World/room creation skipped', { error });
       }
-
-      this.autonomousRoomId = room.id;
-      this.logger.info('Autonomous room initialized', { roomId: room.id });
-    } catch (error) {
-      this.logger.error('Failed to initialize autonomous environment', error as Error);
-      // Fall back to creating temporary IDs
-      this.autonomousWorldId = createUniqueUuid(this.runtime, 'temp-world');
-      this.autonomousRoomId = createUniqueUuid(this.runtime, 'temp-room');
     }
+
+    this.logger.info('Autonomous environment initialized', {
+      worldId: this.autonomousWorldId,
+      roomId: this.autonomousRoomId,
+    });
   }
 
   private loadConfiguration() {
@@ -300,6 +290,23 @@ export class OODALoopService extends Service {
 
       // Log cycle completion time
       const cycleTime = Date.now() - startTime;
+
+      // Update cycle time metric even if there was an error
+      if (this.currentContext) {
+        // Ensure metrics object exists
+        if (!this.currentContext.metrics) {
+          this.currentContext.metrics = {
+            cycleTime: 0,
+            decisionsPerCycle: 0,
+            actionSuccessRate: 0,
+            errorRate: 0,
+            resourceEfficiency: 0,
+            goalProgress: 0,
+          };
+        }
+        this.currentContext.metrics.cycleTime = cycleTime;
+      }
+
       this.logger.info(`OODA cycle completed in ${cycleTime}ms`, {
         runId,
         cycleTime,
@@ -330,8 +337,14 @@ export class OODALoopService extends Service {
       createdAt: Date.now(),
     };
 
-    // Save observation to memory
-    await this.runtime.createMemory(observationMemory, 'messages');
+    // Save observation to memory if createMemory is available
+    if (typeof this.runtime.createMemory === 'function') {
+      try {
+        await this.runtime.createMemory(observationMemory, 'messages');
+      } catch (error) {
+        this.logger.warn('Failed to save observation memory', { error });
+      }
+    }
 
     // Collect data from various providers
     try {
@@ -355,7 +368,11 @@ export class OODALoopService extends Service {
             });
           }
         } catch (error) {
-          this.logger.warn(`Failed to get data from provider ${provider.name}`, { error });
+          this.logger.warn(`Failed to get data from provider ${provider.name}`, {
+            error: error instanceof Error ? error.message : String(error),
+            provider: provider.name,
+          });
+          // Continue with other providers
         }
       }
     } catch (error) {
@@ -373,6 +390,20 @@ export class OODALoopService extends Service {
     // Observe goal progress
     const goalProgress = await this.observeGoalProgress();
     observations.push(...goalProgress);
+
+    // NEW: Observe action capabilities and recent action history
+    const actionCapabilities = await this.observeActionCapabilities();
+    observations.push(...actionCapabilities);
+
+    // NEW: Observe file system state if relevant
+    const fileSystemState = await this.observeFileSystemState();
+    if (fileSystemState) {
+      observations.push(fileSystemState);
+    }
+
+    // NEW: Observe recent command outputs
+    const recentCommands = await this.observeRecentCommands();
+    observations.push(...recentCommands);
 
     this.currentContext!.observations = observations;
     this.logger.observing('Completed observation phase', {
@@ -476,7 +507,24 @@ export class OODALoopService extends Service {
   }
 
   private async getResourceStatus(): Promise<ResourceStatus> {
-    // Get actual resource usage if available
+    // Try to get from resource monitor service
+    let resourceMonitor = null;
+    if (typeof this.runtime.getService === 'function') {
+      resourceMonitor = this.runtime.getService('resource-monitor');
+    }
+
+    if (resourceMonitor && 'getResourceStatus' in resourceMonitor) {
+      const status = (resourceMonitor as any).getResourceStatus();
+      // Update task slots based on current actions
+      status.taskSlots = {
+        used:
+          this.currentContext?.actions.filter((a) => a.status === ActionStatus.RUNNING).length || 0,
+        total: this.maxConcurrentActions,
+      };
+      return status;
+    }
+
+    // Fallback if no resource monitor
     const taskSlots = {
       used:
         this.currentContext?.actions.filter((a) => a.status === ActionStatus.RUNNING).length || 0,
@@ -512,17 +560,32 @@ export class OODALoopService extends Service {
       createdAt: Date.now(),
     };
 
-    // Save orientation to memory
-    await this.runtime.createMemory(orientMemory, 'messages');
+    // Save orientation to memory if createMemory is available
+    if (typeof this.runtime.createMemory === 'function') {
+      try {
+        await this.runtime.createMemory(orientMemory, 'messages');
+      } catch (error) {
+        this.logger.warn('Failed to save orientation memory', { error });
+      }
+    }
 
     // Compose initial state with standard providers
-    const state = await this.runtime.composeState(orientMemory, [
-      'AUTONOMOUS_FEED',
-      'CHARACTER',
-      'RECENT_MESSAGES',
-      'ENTITIES',
-      'ACTIONS',
-    ]);
+    let state: State;
+    try {
+      state = await this.runtime.composeState(orientMemory, [
+        'AUTONOMOUS_FEED',
+        'CHARACTER',
+        'RECENT_MESSAGES',
+        'ENTITIES',
+        'ACTIONS',
+      ]);
+    } catch (error) {
+      this.logger.warn('Failed to compose state with all providers, trying with minimal set', {
+        error,
+      });
+      // Try with just the autonomous feed if other providers fail
+      state = await this.runtime.composeState(orientMemory, ['AUTONOMOUS_FEED']);
+    }
 
     // Analyze observations to update orientation
     const relevantObservations = this.currentContext!.observations.filter(
@@ -542,6 +605,9 @@ export class OODALoopService extends Service {
 
     // Update goal priorities based on observations
     this.updateGoalPriorities(relevantObservations);
+
+    // NEW: Analyze action opportunities based on observations
+    this.identifyActionOpportunities(relevantObservations, state);
 
     this.logger.orienting('Completed orientation phase', {
       factors: this.currentContext!.orientation.environmentalFactors.length,
@@ -652,6 +718,30 @@ export class OODALoopService extends Service {
     this.currentContext!.phase = OODAPhase.DECIDING;
     this.logger.deciding('Starting decision phase - using messageHandlerTemplate');
 
+    // Enhance the state with action suggestions
+    if (state.values.suggestedActions && state.values.suggestedActions.length > 0) {
+      state.text += `\n\nSuggested actions based on current context: ${state.values.suggestedActions.join(', ')}`;
+      state.text += `\n\nAction opportunities identified: ${state.values.actionOpportunities?.join('; ') || 'none'}`;
+    }
+
+    // Add available specialty actions to state
+    const specialtyActions = this.runtime.actions
+      .filter((a) =>
+        [
+          'BROWSE_WEB',
+          'FILE_OPERATION',
+          'EXECUTE_COMMAND',
+          'GIT_OPERATION',
+          'PACKAGE_MANAGEMENT',
+        ].includes(a.name)
+      )
+      .map((a) => `${a.name}: ${a.description}`)
+      .join('\n');
+
+    if (specialtyActions) {
+      state.text += `\n\nAvailable specialty actions:\n${specialtyActions}`;
+    }
+
     // Use messageHandlerTemplate to decide what actions and providers to use
     const prompt = composePromptFromState({
       state,
@@ -720,6 +810,16 @@ export class OODALoopService extends Service {
 
       // Save decision to memory
       await this.runtime.createMemory(responseMessage, 'messages');
+
+      // Log the decision with more detail
+      this.logger.deciding('Decision made', {
+        thought: responseContent.thought,
+        actions: responseContent.actions,
+        providers: responseContent.providers,
+        suggestedActionsUsed: state.values.suggestedActions?.filter((a: string) =>
+          responseContent.actions?.includes(a)
+        ),
+      });
     }
 
     // Update metrics
@@ -933,7 +1033,8 @@ export class OODALoopService extends Service {
   private calculateResourceEfficiency(): number {
     // Simplified calculation based on cycle time
     const targetCycleTime = 10000; // 10 seconds target
-    const efficiency = Math.max(0, 1 - this.currentContext!.metrics.cycleTime / targetCycleTime);
+    const actualCycleTime = Date.now() - this.currentContext!.startTime;
+    const efficiency = Math.max(0, 1 - actualCycleTime / targetCycleTime);
     return Math.min(efficiency, 1);
   }
 
@@ -966,6 +1067,227 @@ export class OODALoopService extends Service {
   }
 
   static async start(runtime: IAgentRuntime): Promise<Service> {
-    return new OODALoopService(runtime);
+    const service = new OODALoopService(runtime);
+    // Wait a bit for initialization to complete
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    return service;
+  }
+
+  // NEW: Observe available actions and their recent usage
+  private async observeActionCapabilities(): Promise<Observation[]> {
+    const observations: Observation[] = [];
+
+    try {
+      // Get action usage from memory
+      let recentActions: Memory[] = [];
+      if (typeof this.runtime.getMemories === 'function') {
+        recentActions = await this.runtime.getMemories({
+          roomId: this.autonomousRoomId!,
+          agentId: this.runtime.agentId,
+          count: 20,
+          tableName: 'messages',
+        });
+      }
+
+      // Analyze action usage patterns
+      const actionUsage: Record<string, number> = {};
+      for (const memory of recentActions) {
+        if (memory.content.actions) {
+          for (const action of memory.content.actions) {
+            actionUsage[action] = (actionUsage[action] || 0) + 1;
+          }
+        }
+      }
+
+      // Check for available specialty actions
+      const specialtyActions = [
+        'BROWSE_WEB',
+        'FILE_OPERATION',
+        'EXECUTE_COMMAND',
+        'GIT_OPERATION',
+        'PACKAGE_MANAGEMENT',
+      ];
+
+      const availableActions = this.runtime.actions
+        .filter((a) => specialtyActions.includes(a.name))
+        .map((a) => ({
+          name: a.name,
+          description: a.description,
+          recentUsage: actionUsage[a.name] || 0,
+        }));
+
+      if (availableActions.length > 0) {
+        observations.push({
+          timestamp: Date.now(),
+          type: ObservationType.SYSTEM_STATE,
+          source: 'action_analyzer',
+          data: {
+            availableActions,
+            actionUsage,
+          },
+          relevance: 0.7,
+        });
+      }
+    } catch (error) {
+      this.logger.warn('Failed to observe action capabilities', { error });
+    }
+
+    return observations;
+  }
+
+  // NEW: Check if there are file-related tasks or needs
+  private async observeFileSystemState(): Promise<Observation | null> {
+    try {
+      // Check recent memories for file-related activities
+      let recentMemories: Memory[] = [];
+      if (typeof this.runtime.getMemories === 'function') {
+        recentMemories = await this.runtime.getMemories({
+          roomId: this.autonomousRoomId!,
+          agentId: this.runtime.agentId,
+          count: 10,
+          tableName: 'messages',
+        });
+      }
+
+      const fileRelatedActivities = recentMemories.filter(
+        (m) =>
+          m.content.text?.toLowerCase().includes('file') ||
+          m.content.text?.toLowerCase().includes('report') ||
+          (m.content.data as any)?.filePath
+      );
+
+      if (fileRelatedActivities.length > 0) {
+        return {
+          timestamp: Date.now(),
+          type: ObservationType.EXTERNAL_EVENT,
+          source: 'file_system_observer',
+          data: {
+            recentFileOperations: fileRelatedActivities.length,
+            lastFileOperation: fileRelatedActivities[0]?.content.data,
+          },
+          relevance: 0.6,
+        };
+      }
+    } catch (error) {
+      this.logger.warn('Failed to observe file system state', { error });
+    }
+
+    return null;
+  }
+
+  // NEW: Check recent command executions
+  private async observeRecentCommands(): Promise<Observation[]> {
+    const observations: Observation[] = [];
+
+    try {
+      let recentMemories: Memory[] = [];
+      if (typeof this.runtime.getMemories === 'function') {
+        recentMemories = await this.runtime.getMemories({
+          roomId: this.autonomousRoomId!,
+          agentId: this.runtime.agentId,
+          count: 10,
+          tableName: 'messages',
+        });
+      }
+
+      const commandExecutions = recentMemories.filter(
+        (m) => (m.content.data as any)?.command || m.content.actions?.includes('EXECUTE_COMMAND')
+      );
+
+      if (commandExecutions.length > 0) {
+        observations.push({
+          timestamp: Date.now(),
+          type: ObservationType.EXTERNAL_EVENT,
+          source: 'command_history',
+          data: {
+            recentCommands: commandExecutions.map((m) => ({
+              command: (m.content.data as any)?.command,
+              output: (m.content.data as any)?.output?.substring(0, 200),
+              timestamp: m.createdAt,
+            })),
+          },
+          relevance: 0.5,
+        });
+      }
+    } catch (error) {
+      this.logger.warn('Failed to observe recent commands', { error });
+    }
+
+    return observations;
+  }
+
+  // NEW: Identify opportunities for specific action types
+  private identifyActionOpportunities(observations: Observation[], state: State) {
+    const opportunities: string[] = [];
+
+    // Check for web research opportunities
+    const hasQuestions = observations.some(
+      (o) =>
+        o.data?.text?.includes('?') ||
+        o.data?.text?.toLowerCase().includes('research') ||
+        o.data?.text?.toLowerCase().includes('find out')
+    );
+
+    if (hasQuestions) {
+      opportunities.push('BROWSE_WEB: Research questions or gather information');
+      state.values.suggestedActions = state.values.suggestedActions || [];
+      state.values.suggestedActions.push('BROWSE_WEB');
+    }
+
+    // Check for file creation opportunities
+    const needsDocumentation = observations.some(
+      (o) =>
+        o.data?.text?.toLowerCase().includes('document') ||
+        o.data?.text?.toLowerCase().includes('report') ||
+        o.data?.text?.toLowerCase().includes('save')
+    );
+
+    if (needsDocumentation) {
+      opportunities.push('FILE_OPERATION: Create documentation or reports');
+      state.values.suggestedActions = state.values.suggestedActions || [];
+      state.values.suggestedActions.push('FILE_OPERATION');
+    }
+
+    // Check for system monitoring opportunities
+    const systemCheck = observations.find((o) => o.type === ObservationType.SYSTEM_STATE);
+    if (systemCheck && systemCheck.data.cpu > 70) {
+      opportunities.push('EXECUTE_COMMAND: Monitor system resources');
+      state.values.suggestedActions = state.values.suggestedActions || [];
+      state.values.suggestedActions.push('EXECUTE_COMMAND');
+    }
+
+    // Check for git opportunities
+    const hasCodeChanges = observations.some(
+      (o) =>
+        o.data?.text?.toLowerCase().includes('code') ||
+        o.data?.text?.toLowerCase().includes('repository') ||
+        o.data?.text?.toLowerCase().includes('commit')
+    );
+
+    if (hasCodeChanges) {
+      opportunities.push('GIT_OPERATION: Manage code repository');
+      state.values.suggestedActions = state.values.suggestedActions || [];
+      state.values.suggestedActions.push('GIT_OPERATION');
+    }
+
+    // Check for package management opportunities
+    const hasPackageNeeds = observations.some(
+      (o) =>
+        o.data?.text?.toLowerCase().includes('install') ||
+        o.data?.text?.toLowerCase().includes('package') ||
+        o.data?.text?.toLowerCase().includes('dependency')
+    );
+
+    if (hasPackageNeeds) {
+      opportunities.push('PACKAGE_MANAGEMENT: Manage dependencies');
+      state.values.suggestedActions = state.values.suggestedActions || [];
+      state.values.suggestedActions.push('PACKAGE_MANAGEMENT');
+    }
+
+    // Store opportunities in context
+    if (opportunities.length > 0) {
+      this.logger.info('Identified action opportunities', { opportunities });
+      state.values.actionOpportunities = opportunities;
+    }
   }
 }

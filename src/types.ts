@@ -1,3 +1,5 @@
+import type { UUID } from '@elizaos/core';
+
 // Extend the core service types with autonomous service
 declare module '@elizaos/core' {
   interface ServiceTypeRegistry {
@@ -77,13 +79,40 @@ export interface HistoricalContext {
 }
 
 export interface Learning {
-  id: string;
+  id: UUID;
   timestamp: number;
-  situation: string;
-  action: string;
-  outcome: string;
-  lesson: string;
+  context: {
+    goals: string[];
+    environment: string[];
+    observations: string[];
+  };
+  outcome: 'success' | 'failure';
+  pattern: string;
   confidence: number;
+  applicableConditions: string[];
+  embedding?: number[];
+}
+
+export interface SuccessPattern {
+  id: UUID;
+  pattern: string;
+  frequency: number;
+  confidence: number;
+  lastOccurrence: number;
+  conditions: string[];
+  outcomes: string[];
+  embedding?: number[];
+}
+
+export interface FailurePattern {
+  id: UUID;
+  pattern: string;
+  frequency: number;
+  severity: number;
+  lastOccurrence: number;
+  causes: string[];
+  mitigations: string[];
+  embedding?: number[];
 }
 
 export interface Decision {

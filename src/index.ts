@@ -13,22 +13,10 @@ import { OODALoopService } from './ooda-service.ts';
 import './types.ts'; // Ensure module augmentation is loaded
 import { autonomousFeedProvider } from './messageFeed.ts';
 import { reflectAction } from './reflect.ts';
-import { scenarioTests } from './scenarios/tests/index.ts';
 import { oodaLoopE2ETests } from './__tests__/e2e/ooda-loop.e2e.ts';
-
-// Import scenario actions and providers
-import {
-  documentationResearchProvider,
-  startDocumentationResearchAction,
-  checkResearchProgressAction,
-  githubAnalysisProvider,
-  startGithubAnalysisAction,
-  analyzeSpecificRepoAction,
-  systemHealthProvider,
-  systemHealthCheckAction,
-  learningPathProvider,
-  startLearningPathAction,
-} from './scenarios/index.ts';
+import { worldProvider } from './worldProvider.ts';
+import { ResourceMonitorService } from './resource-monitor.ts';
+import { AutonomyAPIServer } from './api-server.ts';
 
 // Import real actions that actually do work
 import {
@@ -48,6 +36,7 @@ declare global {
       AUTONOMOUS_FILE_LOGGING?: string;
       AUTONOMOUS_LOG_DIR?: string;
       AUTONOMOUS_LOG_LEVEL?: string;
+      AUTONOMOUS_API_PORT?: string;
     }
   }
 }
@@ -116,7 +105,7 @@ export const autoPlugin: Plugin = {
   description:
     'Autonomous operations plugin with OODA loop decision-making and real action execution',
 
-  services: [OODALoopService],
+  services: [OODALoopService, ResourceMonitorService],
 
   actions: [
     // Real actions that actually do work
@@ -126,36 +115,41 @@ export const autoPlugin: Plugin = {
     analyzeDataAction,
     gitOperationAction,
     packageManagementAction,
-
-    // Legacy scenario actions (these still just create TODOs)
     reflectAction,
-    startDocumentationResearchAction,
-    checkResearchProgressAction,
-    startGithubAnalysisAction,
-    analyzeSpecificRepoAction,
-    systemHealthCheckAction,
-    startLearningPathAction,
   ],
 
-  providers: [
-    autonomousFeedProvider,
-    documentationResearchProvider,
-    githubAnalysisProvider,
-    systemHealthProvider,
-    learningPathProvider,
-  ],
+  providers: [autonomousFeedProvider, worldProvider],
 
   tests: [
     {
       name: 'OODA Loop E2E Tests',
       tests: oodaLoopE2ETests,
     },
-    ...scenarioTests,
   ],
+
+  // Start API server if enabled
+  init: async (config: Record<string, string>, runtime: any) => {
+    if (process.env.AUTONOMOUS_API_PORT) {
+      const port = parseInt(process.env.AUTONOMOUS_API_PORT);
+      const apiServer = new AutonomyAPIServer(runtime, port);
+
+      // Hook into OODA service when it starts
+      runtime.on('serviceStarted', (service: any) => {
+        if (service.constructor.serviceType === 'autonomous') {
+          apiServer.setOODAService(service);
+        }
+      });
+
+      await apiServer.start();
+      console.log(`Autonomy API server started on port ${port}`);
+    }
+  },
 };
 
 // Export types for external use
 export * from './types';
 export { getLogger } from './logging';
+export { AutonomyAPIServer } from './api-server';
+export { ResourceMonitorService } from './resource-monitor';
 
 export default autoPlugin;

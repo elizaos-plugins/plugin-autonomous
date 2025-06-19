@@ -35,9 +35,10 @@ export const autonomousFeedProvider: Provider = {
     const conversationLength = runtime.getConversationLength();
 
     // Parallelize initial data fetching operations including recentInteractions
-    const [entitiesData, room, recentMessagesData] = await Promise.all([
+    let room = null;
+
+    const [entitiesData, recentMessagesData] = await Promise.all([
       getEntityDetails({ runtime, roomId: autonomousRoomId }),
-      runtime.getRoom(autonomousRoomId),
       runtime.getMemories({
         tableName: 'messages',
         roomId: autonomousRoomId,
@@ -45,6 +46,15 @@ export const autonomousFeedProvider: Provider = {
         unique: false,
       }),
     ]);
+
+    // Get room if function exists
+    if (typeof runtime.getRoom === 'function') {
+      try {
+        room = await runtime.getRoom(autonomousRoomId);
+      } catch (error) {
+        console.error('Error in recentMessagesProvider:', error);
+      }
+    }
 
     // Format recent messages and posts in parallel
     const formattedRecentMessages = await formatMessages({

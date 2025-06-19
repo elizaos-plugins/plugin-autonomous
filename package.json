@@ -41,7 +41,11 @@
   ],
   "dependencies": {
     "@elizaos/core": "workspace:*",
-    "zod": "3.24.2"
+    "zod": "3.24.2",
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1",
+    "socket.io-client": "^4.6.1",
+    "cors": "^2.8.5"
   },
   "peerDependencies": {},
   "devDependencies": {
@@ -50,7 +54,9 @@
     "prettier": "3.5.3",
     "tsup": "8.4.0",
     "typescript": "5.8.2",
-    "vitest": "3.1.4"
+    "vitest": "3.1.4",
+    "@types/express": "^4.17.17",
+    "@types/cors": "^2.8.13"
   },
   "scripts": {
     "start": "elizaos start",

@@ -1,396 +1,308 @@
 import React, { useState, useEffect } from 'react';
-import { OODAPhase, type OODAContext, type LoopMetrics } from '../types';
+import { io, Socket } from 'socket.io-client';
+import { OODAContext, OODAPhase, LoopMetrics, Goal, Observation, ActionExecution } from '../types';
 
 interface OODAMonitorProps {
-  apiEndpoint?: string;
+  apiUrl?: string;
 }
 
-interface OODAStatus {
-  isRunning: boolean;
-  currentPhase: OODAPhase;
-  currentRunId: string | null;
-  recentRuns: OODARunSummary[];
-  metrics: LoopMetrics | null;
-}
-
-interface OODARunSummary {
-  runId: string;
-  startTime: number;
-  endTime?: number;
-  decisions: number;
-  actions: number;
-  errors: number;
-  success: boolean;
-}
-
-export const OODAMonitor: React.FC<OODAMonitorProps> = ({
-  apiEndpoint = '/api/autonomy/status',
-}) => {
-  const [status, setStatus] = useState<OODAStatus>({
-    isRunning: false,
-    currentPhase: OODAPhase.IDLE,
-    currentRunId: null,
-    recentRuns: [],
-    metrics: null,
-  });
-  const [isLoading, setIsLoading] = useState(true);
+const OODAMonitor: React.FC<OODAMonitorProps> = ({ apiUrl = 'http://localhost:3001' }) => {
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [context, setContext] = useState<OODAContext | null>(null);
+  const [metrics, setMetrics] = useState<LoopMetrics | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch status from API
-  const fetchStatus = async () => {
-    try {
-      const response = await fetch(apiEndpoint);
-      if (!response.ok) {
-        throw new Error('Failed to fetch status');
-      }
-      const data = await response.json();
-      setStatus(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Toggle OODA loop
-  const toggleLoop = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`${apiEndpoint}/toggle`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        throw new Error('Failed to toggle loop');
-      }
-      await fetchStatus();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    }
-  };
-
-  // Auto-refresh status
   useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 2000); // Update every 2 seconds
-    return () => clearInterval(interval);
-  }, []);
+    // Connect to WebSocket
+    const newSocket = io(apiUrl, {
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
 
-  const getPhaseColor = (phase: OODAPhase) => {
-    switch (phase) {
-      case OODAPhase.OBSERVING:
-        return '#3b82f6'; // blue
-      case OODAPhase.ORIENTING:
-        return '#8b5cf6'; // purple
-      case OODAPhase.DECIDING:
-        return '#f59e0b'; // amber
-      case OODAPhase.ACTING:
-        return '#10b981'; // emerald
-      case OODAPhase.REFLECTING:
-        return '#6366f1'; // indigo
-      default:
-        return '#6b7280'; // gray
-    }
+    newSocket.on('connect', () => {
+      setIsConnected(true);
+      setError(null);
+      newSocket.emit('request:context');
+      newSocket.emit('request:metrics');
+    });
+
+    newSocket.on('disconnect', () => {
+      setIsConnected(false);
+    });
+
+    newSocket.on('connect_error', (err) => {
+      setError(`Connection error: ${err.message}`);
+    });
+
+    newSocket.on('ooda:context', (data: OODAContext) => {
+      setContext(data);
+    });
+
+    newSocket.on('ooda:metrics', (data: LoopMetrics) => {
+      setMetrics(data);
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.close();
+    };
+  }, [apiUrl]);
+
+  const getPhaseColor = (phase: OODAPhase): string => {
+    const colors: Record<OODAPhase, string> = {
+      [OODAPhase.IDLE]: '#6b7280',
+      [OODAPhase.OBSERVING]: '#3b82f6',
+      [OODAPhase.ORIENTING]: '#8b5cf6',
+      [OODAPhase.DECIDING]: '#f59e0b',
+      [OODAPhase.ACTING]: '#10b981',
+      [OODAPhase.REFLECTING]: '#6366f1',
+    };
+    return colors[phase] || '#6b7280';
   };
 
-  const formatDuration = (ms: number) => {
+  const formatDuration = (ms: number): string => {
     if (ms < 1000) return `${ms}ms`;
     if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
     return `${(ms / 60000).toFixed(1)}m`;
   };
 
-  if (isLoading && status.recentRuns.length === 0) {
-    return <div className="ooda-monitor loading">Loading...</div>;
-  }
+  const renderConnectionStatus = () => (
+    <div className={`mb-4 p-3 rounded-lg ${isConnected ? 'bg-green-100' : 'bg-red-100'}`}>
+      <div className="flex items-center">
+        <div
+          className={`w-3 h-3 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}
+        />
+        <span className={`font-semibold ${isConnected ? 'text-green-700' : 'text-red-700'}`}>
+          {isConnected ? 'Connected' : 'Disconnected'}
+        </span>
+      </div>
+      {error && <p className="text-red-600 text-sm mt-1">{error}</p>}
+    </div>
+  );
+
+  const renderPhaseIndicator = () => {
+    if (!context) return null;
+
+    return (
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold mb-3">Current Phase</h3>
+        <div className="flex space-x-2">
+          {Object.values(OODAPhase).map((phase) => (
+            <div
+              key={phase}
+              className={`
+                px-4 py-2 rounded-lg text-sm font-medium transition-all
+                ${
+                  context.phase === phase
+                    ? 'text-white shadow-lg transform scale-105'
+                    : 'text-gray-600 bg-gray-100'
+                }
+              `}
+              style={{
+                backgroundColor: context.phase === phase ? getPhaseColor(phase) : undefined,
+              }}
+            >
+              {phase.charAt(0).toUpperCase() + phase.slice(1)}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderMetrics = () => {
+    if (!metrics) return null;
+
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="text-sm text-gray-600">Cycle Time</h4>
+          <p className="text-2xl font-bold text-blue-600">{formatDuration(metrics.cycleTime)}</p>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="text-sm text-gray-600">Success Rate</h4>
+          <p className="text-2xl font-bold text-green-600">
+            {(metrics.actionSuccessRate * 100).toFixed(1)}%
+          </p>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="text-sm text-gray-600">Error Rate</h4>
+          <p className="text-2xl font-bold text-red-600">{(metrics.errorRate * 100).toFixed(1)}%</p>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="text-sm text-gray-600">Decisions/Cycle</h4>
+          <p className="text-2xl font-bold text-purple-600">{metrics.decisionsPerCycle}</p>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="text-sm text-gray-600">Resource Efficiency</h4>
+          <p className="text-2xl font-bold text-orange-600">
+            {(metrics.resourceEfficiency * 100).toFixed(1)}%
+          </p>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h4 className="text-sm text-gray-600">Goal Progress</h4>
+          <p className="text-2xl font-bold text-indigo-600">
+            {(metrics.goalProgress * 100).toFixed(1)}%
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  const renderGoals = () => {
+    if (!context?.orientation.currentGoals) return null;
+
+    return (
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold mb-3">Active Goals</h3>
+        <div className="space-y-2">
+          {context.orientation.currentGoals.map((goal: Goal) => (
+            <div key={goal.id} className="bg-white p-4 rounded-lg shadow">
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="font-medium">{goal.description}</h4>
+                <span className="text-sm text-gray-600">Priority: {goal.priority}</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${goal.progress * 100}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderObservations = () => {
+    if (!context?.observations || context.observations.length === 0) return null;
+
+    const recentObservations = context.observations.slice(-5);
+
+    return (
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold mb-3">Recent Observations</h3>
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="space-y-2">
+            {recentObservations.map((obs: Observation, index: number) => (
+              <div key={index} className="border-b last:border-b-0 pb-2 last:pb-0">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">{obs.type}</span>
+                  <span className="text-xs text-gray-500">
+                    {new Date(obs.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600 mt-1">
+                  Source: {obs.source} | Relevance: {(obs.relevance * 100).toFixed(0)}%
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderActions = () => {
+    if (!context?.actions || context.actions.length === 0) return null;
+
+    const recentActions = context.actions.slice(-5);
+
+    return (
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold mb-3">Recent Actions</h3>
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="space-y-2">
+            {recentActions.map((action: ActionExecution) => (
+              <div key={action.id} className="border-b last:border-b-0 pb-2 last:pb-0">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700">{action.actionName}</span>
+                  <span
+                    className={`
+                    text-xs px-2 py-1 rounded
+                    ${action.status === 'succeeded' ? 'bg-green-100 text-green-700' : ''}
+                    ${action.status === 'failed' ? 'bg-red-100 text-red-700' : ''}
+                    ${action.status === 'running' ? 'bg-blue-100 text-blue-700' : ''}
+                    ${action.status === 'pending' ? 'bg-gray-100 text-gray-700' : ''}
+                  `}
+                  >
+                    {action.status}
+                  </span>
+                </div>
+                {action.endTime && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    Duration: {formatDuration(action.endTime - action.startTime)}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderErrors = () => {
+    if (!context?.errors || context.errors.length === 0) return null;
+
+    return (
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold mb-3 text-red-600">Recent Errors</h3>
+        <div className="bg-red-50 rounded-lg shadow p-4">
+          <div className="space-y-2">
+            {context.errors.slice(-3).map((error, index) => (
+              <div key={index} className="text-sm">
+                <p className="font-medium text-red-700">{error.message}</p>
+                {error.stack && (
+                  <pre className="text-xs text-red-600 mt-1 overflow-x-auto">{error.stack}</pre>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="ooda-monitor" data-cy="ooda-monitor">
-      <div className="header">
-        <h2>OODA Loop Monitor</h2>
-        <button
-          className={`toggle-button ${status.isRunning ? 'stop' : 'start'}`}
-          onClick={toggleLoop}
-          disabled={isLoading}
-          data-cy="toggle-button"
-        >
-          {status.isRunning ? 'Stop Loop' : 'Start Loop'}
-        </button>
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold mb-6">OODA Loop Monitor</h1>
+
+        {renderConnectionStatus()}
+
+        {isConnected && context ? (
+          <>
+            <div className="bg-white rounded-lg shadow p-6 mb-6">
+              <h2 className="text-xl font-semibold mb-4">
+                Run ID: <span className="text-blue-600">{context.runId}</span>
+              </h2>
+              {renderPhaseIndicator()}
+            </div>
+
+            {renderMetrics()}
+            {renderGoals()}
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>{renderObservations()}</div>
+              <div>{renderActions()}</div>
+            </div>
+
+            {renderErrors()}
+          </>
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-gray-600">
+              {isConnected ? 'Waiting for OODA data...' : 'Connecting to server...'}
+            </p>
+          </div>
+        )}
       </div>
-
-      {error && (
-        <div className="error-message" data-cy="error-message">
-          Error: {error}
-        </div>
-      )}
-
-      <div className="status-section">
-        <h3>Current Status</h3>
-        <div className="status-grid">
-          <div className="status-item">
-            <label>Status:</label>
-            <span className={`status-value ${status.isRunning ? 'running' : 'stopped'}`}>
-              {status.isRunning ? 'Running' : 'Stopped'}
-            </span>
-          </div>
-          <div className="status-item">
-            <label>Phase:</label>
-            <span className="phase-value" style={{ color: getPhaseColor(status.currentPhase) }}>
-              {status.currentPhase}
-            </span>
-          </div>
-          <div className="status-item">
-            <label>Current Run:</label>
-            <span className="run-id">
-              {status.currentRunId ? status.currentRunId.substring(0, 8) : 'None'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {status.metrics && (
-        <div className="metrics-section">
-          <h3>Performance Metrics</h3>
-          <div className="metrics-grid">
-            <div className="metric">
-              <label>Cycle Time:</label>
-              <span>{formatDuration(status.metrics.cycleTime)}</span>
-            </div>
-            <div className="metric">
-              <label>Decisions/Cycle:</label>
-              <span>{status.metrics.decisionsPerCycle}</span>
-            </div>
-            <div className="metric">
-              <label>Success Rate:</label>
-              <span>{(status.metrics.actionSuccessRate * 100).toFixed(1)}%</span>
-            </div>
-            <div className="metric">
-              <label>Error Rate:</label>
-              <span>{(status.metrics.errorRate * 100).toFixed(1)}%</span>
-            </div>
-            <div className="metric">
-              <label>Resource Efficiency:</label>
-              <span>{(status.metrics.resourceEfficiency * 100).toFixed(1)}%</span>
-            </div>
-            <div className="metric">
-              <label>Goal Progress:</label>
-              <span>{(status.metrics.goalProgress * 100).toFixed(1)}%</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="runs-section">
-        <h3>Recent Runs</h3>
-        <div className="runs-list">
-          {status.recentRuns.length === 0 ? (
-            <div className="no-runs">No runs yet</div>
-          ) : (
-            status.recentRuns.map((run) => (
-              <div key={run.runId} className="run-item" data-cy={`run-${run.runId}`}>
-                <div className="run-header">
-                  <span className="run-id">{run.runId.substring(0, 8)}</span>
-                  <span className={`run-status ${run.success ? 'success' : 'failed'}`}>
-                    {run.success ? '✓' : '✗'}
-                  </span>
-                </div>
-                <div className="run-details">
-                  <span>Decisions: {run.decisions}</span>
-                  <span>Actions: {run.actions}</span>
-                  <span>Errors: {run.errors}</span>
-                  <span>
-                    Duration: {formatDuration((run.endTime || Date.now()) - run.startTime)}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      <style jsx>{`
-        .ooda-monitor {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-          max-width: 800px;
-          margin: 0 auto;
-          padding: 20px;
-        }
-
-        .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 30px;
-        }
-
-        .header h2 {
-          margin: 0;
-          color: #1f2937;
-        }
-
-        .toggle-button {
-          padding: 10px 20px;
-          border: none;
-          border-radius: 6px;
-          font-size: 16px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .toggle-button.start {
-          background-color: #10b981;
-          color: white;
-        }
-
-        .toggle-button.start:hover:not(:disabled) {
-          background-color: #059669;
-        }
-
-        .toggle-button.stop {
-          background-color: #ef4444;
-          color: white;
-        }
-
-        .toggle-button.stop:hover:not(:disabled) {
-          background-color: #dc2626;
-        }
-
-        .toggle-button:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .error-message {
-          background-color: #fee;
-          border: 1px solid #fcc;
-          color: #c00;
-          padding: 10px;
-          border-radius: 6px;
-          margin-bottom: 20px;
-        }
-
-        .status-section,
-        .metrics-section,
-        .runs-section {
-          background: #f9fafb;
-          border: 1px solid #e5e7eb;
-          border-radius: 8px;
-          padding: 20px;
-          margin-bottom: 20px;
-        }
-
-        .status-section h3,
-        .metrics-section h3,
-        .runs-section h3 {
-          margin: 0 0 15px 0;
-          color: #374151;
-          font-size: 18px;
-        }
-
-        .status-grid,
-        .metrics-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 15px;
-        }
-
-        .status-item,
-        .metric {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 10px;
-          background: white;
-          border-radius: 6px;
-          border: 1px solid #e5e7eb;
-        }
-
-        .status-item label,
-        .metric label {
-          color: #6b7280;
-          font-size: 14px;
-        }
-
-        .status-value.running {
-          color: #10b981;
-          font-weight: 500;
-        }
-
-        .status-value.stopped {
-          color: #6b7280;
-          font-weight: 500;
-        }
-
-        .phase-value {
-          font-weight: 600;
-          text-transform: uppercase;
-          font-size: 14px;
-        }
-
-        .runs-list {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-
-        .run-item {
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 6px;
-          padding: 15px;
-        }
-
-        .run-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 10px;
-        }
-
-        .run-id {
-          font-family: 'Courier New', monospace;
-          font-size: 14px;
-          color: #374151;
-        }
-
-        .run-status {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: bold;
-          color: white;
-        }
-
-        .run-status.success {
-          background-color: #10b981;
-        }
-
-        .run-status.failed {
-          background-color: #ef4444;
-        }
-
-        .run-details {
-          display: flex;
-          gap: 20px;
-          font-size: 14px;
-          color: #6b7280;
-        }
-
-        .no-runs {
-          text-align: center;
-          color: #9ca3af;
-          padding: 40px;
-        }
-
-        .loading {
-          text-align: center;
-          padding: 40px;
-          color: #6b7280;
-        }
-      `}</style>
     </div>
   );
 };
+
+export default OODAMonitor;
