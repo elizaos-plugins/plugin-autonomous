@@ -1,21 +1,21 @@
-import { addHeader, createUniqueUuid } from "@elizaos/core";
+import { addHeader, createUniqueUuid } from '@elizaos/core';
 
-import type { IAgentRuntime, Memory, Provider, UUID } from "@elizaos/core";
+import type { IAgentRuntime, Memory, Provider, UUID } from '@elizaos/core';
 
-const AUTO_WORLD_SEED = "autonomous_world_singleton";
-const AUTO_ROOM_SEED = "autonomous_room_singleton";
+const AUTO_WORLD_SEED = 'autonomous_world_singleton';
+const AUTO_ROOM_SEED = 'autonomous_room_singleton';
 
 /**
  * Provider that gives information about the autonomous world and room setup
  */
 export const autonomousWorldProvider: Provider = {
-  name: "AUTONOMOUS_WORLD",
-  description: "Information about the autonomous world and room setup",
+  name: 'AUTONOMOUS_WORLD',
+  description: 'Information about the autonomous world and room setup',
   position: 50,
   get: async (runtime: IAgentRuntime, message: Memory) => {
     try {
       // Get the WORLD_ID setting
-      const worldId = runtime.getSetting("WORLD_ID") as UUID;
+      const worldId = runtime.getSetting('WORLD_ID') as UUID;
       const autonomousRoomId = createUniqueUuid(runtime, AUTO_ROOM_SEED);
 
       if (!worldId) {
@@ -23,13 +23,13 @@ export const autonomousWorldProvider: Provider = {
           data: {
             worldId: null,
             roomId: autonomousRoomId,
-            status: "no_world_id",
+            status: 'no_world_id',
           },
           values: {
             autonomousWorld:
-              "No WORLD_ID configured - autonomous system may not be fully initialized.",
+              'No WORLD_ID configured - autonomous system may not be fully initialized.',
           },
-          text: "No WORLD_ID configured - autonomous system may not be fully initialized.",
+          text: 'No WORLD_ID configured - autonomous system may not be fully initialized.',
         };
       }
 
@@ -62,25 +62,22 @@ export const autonomousWorldProvider: Provider = {
         `# Autonomous World Status`,
         ``,
         `**World ID:** ${worldId}`,
-        `**World Status:** ${world ? "Found" : "Not Found"}`,
-        world ? `**World Name:** ${world.name}` : "",
+        `**World Status:** ${world ? 'Found' : 'Not Found'}`,
+        world ? `**World Name:** ${world.name}` : '',
         ``,
         `**Autonomous Room ID:** ${autonomousRoomId}`,
-        `**Room Status:** ${room ? "Found" : "Not Found"}`,
-        room ? `**Room Name:** ${room.name}` : "",
-        room ? `**Room Type:** ${room.type}` : "",
-        room ? `**Room World ID:** ${room.worldId}` : "",
+        `**Room Status:** ${room ? 'Found' : 'Not Found'}`,
+        room ? `**Room Name:** ${room.name}` : '',
+        room ? `**Room Type:** ${room.type}` : '',
+        room ? `**Room World ID:** ${room.worldId}` : '',
         ``,
         `**Agent ID:** ${runtime.agentId}`,
         `**Character Name:** ${runtime.character.name}`,
       ]
         .filter(Boolean)
-        .join("\n");
+        .join('\n');
 
-      const formattedText = addHeader(
-        "# Autonomous World Information",
-        statusText,
-      );
+      const formattedText = addHeader('# Autonomous World Information', statusText);
 
       return {
         data: {
@@ -90,26 +87,27 @@ export const autonomousWorldProvider: Provider = {
           roomInfo,
           agentId: runtime.agentId,
           characterName: runtime.character.name,
-          status: world && room ? "ready" : "incomplete",
+          status: world && room ? 'ready' : 'incomplete',
         },
         values: {
           autonomousWorld: statusText,
-          worldStatus: world ? "ready" : "missing",
-          roomStatus: room ? "ready" : "missing",
+          worldStatus: world ? 'ready' : 'missing',
+          roomStatus: room ? 'ready' : 'missing',
         },
         text: formattedText,
       };
     } catch (error) {
-      console.error("[AutonomousWorldProvider] Error:", error);
+      console.error('[AutonomousWorldProvider] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         data: {
-          error: error.message,
-          status: "error",
+          error: errorMessage,
+          status: 'error',
         },
         values: {
-          autonomousWorld: `Error retrieving autonomous world information: ${error.message}`,
+          autonomousWorld: `Error retrieving autonomous world information: ${errorMessage}`,
         },
-        text: `Error retrieving autonomous world information: ${error.message}`,
+        text: `Error retrieving autonomous world information: ${errorMessage}`,
       };
     }
   },

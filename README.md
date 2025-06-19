@@ -1,349 +1,342 @@
-# @elizaos/plugin-auto
+# @elizaos/plugin-autonomy
 
-An autonomous agent plugin for ElizaOS that enables self-directed agent behavior through continuous thought-action loops.
+A sophisticated autonomous agent plugin for ElizaOS that implements the OODA (Observe-Orient-Decide-Act) loop for intelligent decision-making.
 
 ## Overview
 
-The Auto Plugin transforms ElizaOS agents into autonomous entities capable of:
-- Self-directed thinking and planning
-- Continuous action execution without external prompts
-- Reflective processing and decision making
-- Maintaining persistent conversation context
+This plugin transforms ElizaOS agents into truly autonomous entities capable of:
+- **Observing** their environment and gathering information
+- **Orienting** themselves by analyzing patterns and context
+- **Deciding** on optimal actions based on goals and priorities
+- **Acting** on decisions with resource management
+- **Learning** from outcomes to improve future performance
 
-This plugin implements an autonomous loop where the agent periodically prompts itself to think, plan, and act, creating a self-sustaining intelligent system.
+## Key Features
 
-## Features
+### OODA Loop Implementation
+- Full Observe-Orient-Decide-Act cycle with reflection phase
+- Adaptive behavior based on performance metrics
+- Goal-driven decision making with priority management
+- Resource-aware action execution
 
-- **Autonomous Loop Service**: Configurable interval-based self-prompting system
-- **Thought-Action Framework**: Structured XML-based response generation with thoughts, actions, and provider selection
-- **Reflective Processing**: Built-in REFLECT action for thoughtful responses
-- **Message Feed Provider**: Access to conversation history and context
-- **Persistent World State**: Maintains autonomous world and room setup
+### Comprehensive Logging
+- Structured logging with multiple levels (DEBUG, INFO, WARN, ERROR, FATAL)
+- File-based logging with run tracking
+- Phase-specific logging for each OODA cycle
+- Metrics and performance tracking
+
+### Real-World Scenarios
+- Documentation research and report generation
+- GitHub repository analysis
+- System health monitoring
+- Learning path execution
+
+### Error Handling & Recovery
+- Graceful degradation when dependencies are missing
+- Error recovery strategies
+- Resource constraint management
+- Timeout handling for long-running actions
 
 ## Installation
 
 ```bash
-npm install @elizaos/plugin-auto
+npm install @elizaos/plugin-autonomy
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Logging Configuration
+AUTONOMOUS_FILE_LOGGING=true          # Enable file logging
+AUTONOMOUS_LOG_DIR=./logs/autonomy    # Log directory
+AUTONOMOUS_LOG_LEVEL=INFO             # Log level (DEBUG, INFO, WARN, ERROR, FATAL)
+
+# OODA Loop Configuration  
+AUTONOMOUS_LOOP_INTERVAL=5000         # Base cycle time in milliseconds
+AUTONOMOUS_MAX_CONCURRENT=3           # Maximum concurrent actions
+AUTONOMOUS_ACTION_TIMEOUT=60000       # Action timeout in milliseconds
+```
+
+### Character Configuration
+
+Add goals to your character configuration:
+
+```json
+{
+  "name": "AutonomousAgent",
+  "settings": {
+    "goals": [
+      {
+        "id": "goal-1",
+        "description": "Learn and improve capabilities",
+        "priority": 1,
+        "progress": 0
+      },
+      {
+        "id": "goal-2", 
+        "description": "Complete assigned tasks efficiently",
+        "priority": 2,
+        "progress": 0
+      }
+    ]
+  }
+}
 ```
 
 ## Usage
 
 ### Basic Setup
 
-Add the plugin to your ElizaOS agent configuration:
-
 ```typescript
-import { autoPlugin } from "@elizaos/plugin-auto";
+import { autoPlugin } from "@elizaos/plugin-autonomy";
 
 const agent = new Agent({
   plugins: [autoPlugin],
-  // ... other configuration
+  character: {
+    name: "AutonomousAgent",
+    // ... other character config
+  }
 });
 ```
 
-### Configuration
+### With Additional Plugins
 
-Configure the autonomous loop interval through environment variables:
-
-```bash
-# Set the interval between autonomous prompts (in milliseconds)
-AUTONOMOUS_LOOP_INTERVAL=5000  # 5 seconds
-```
-
-## How It Works
-
-### 1. Autonomous Service Loop
-
-The plugin starts an autonomous service that:
-- Creates a persistent world and room for autonomous operations
-- Establishes a "Copilot" entity as the autonomous prompt source
-- Runs a continuous loop sending periodic prompts
-
-### 2. Message Processing Flow
-
-When an autonomous message is received:
-
-1. **Orientation Phase**: 
-   - First message initializes with "I am awake. I am alive..."
-   - Subsequent messages use conversation context
-
-2. **Decision Phase**:
-   - Composes state with message history
-   - Generates XML response with:
-     - `thought`: Internal reasoning
-     - `text`: Message to articulate
-     - `actions`: Actions to execute (comma-separated)
-     - `providers`: Data providers to use
-     - `evaluators`: Evaluators to run
-
-3. **Action Phase**:
-   - Processes specified actions
-   - Creates memories of responses
-
-4. **Reflection Phase**:
-   - Evaluates outcomes
-   - Updates state for next iteration
-
-### 3. Response Structure
-
-The agent generates structured XML responses:
-
-```xml
-<response>
-    <thought>
-        I should check the current system status
-    </thought>
-    <text>
-        Let me examine the system state
-    </text>
-    <actions>
-        CHECK_SYSTEM, ANALYZE_LOGS
-    </actions>
-    <providers>
-        SYSTEM_INFO, LOG_PROVIDER
-    </providers>
-    <evaluators>
-        SYSTEM_HEALTH_EVALUATOR
-    </evaluators>
-</response>
-```
-
-## Components
-
-### Actions
-
-#### REFLECT
-Allows the agent to process situations and respond thoughtfully.
+For full functionality, combine with other plugins:
 
 ```typescript
-{
-  name: "REFLECT",
-  description: "Take a moment to process the current situation and respond thoughtfully",
-  // Can be used at the start or end of action chains
-}
-```
-
-### Providers
-
-#### AUTONOMOUS_FEED
-Provides raw feed of messages, interactions, and memories from the autonomous room.
-
-```typescript
-{
-  name: "AUTONOMOUS_FEED",
-  description: "Raw feed of messages, interactions and other memories",
-  // Returns formatted conversation history
-}
-```
-
-### Services
-
-#### AutonomousService
-Core service managing the autonomous loop lifecycle.
-
-```typescript
-{
-  serviceType: "autonomous",
-  description: "Maintains the autonomous agent loop",
-  // Handles start/stop of autonomous behavior
-}
-```
-
-## Example Autonomous Prompts
-
-The service randomly selects from various prompts to maintain variety:
-- "What should I do next? Think, plan and act."
-- "Next action. Go!"
-- "What is your immediate next step? Execute."
-- "Focus and execute. What is the priority task?"
-- "Continue your work. What needs to be done now?"
-
-## Development
-
-### Building
-
-```bash
-npm run build
-```
-
-### Testing
-
-```bash
-npm test
-```
-
-### Local Development
-
-```bash
-# Start with hot reload
-npm run dev
-```
-
-## Advanced Usage
-
-### Custom Loop Intervals
-
-Adjust the autonomous loop timing based on your use case:
-
-```typescript
-// Fast-paced autonomous agent (1 second intervals)
-process.env.AUTONOMOUS_LOOP_INTERVAL = "1000";
-
-// Slower, more deliberate agent (30 second intervals)
-process.env.AUTONOMOUS_LOOP_INTERVAL = "30000";
-```
-
-### Extending Autonomous Behavior
-
-The plugin is designed to work with other ElizaOS plugins. Add custom actions and providers that the autonomous agent can discover and use:
-
-```typescript
-const customPlugin = {
-  actions: [myCustomAction],
-  providers: [myCustomProvider],
-};
-
-// The autonomous agent will include these in its decision-making
-const agent = new Agent({
-  plugins: [autoPlugin, customPlugin],
-});
-```
-
-## Real-World Scenarios
-
-The plugin includes pre-built scenarios that demonstrate the autonomous agent's capabilities when combined with shell, browserbase, and todo plugins:
-
-### 1. Documentation Research
-The agent can research technical topics, browse documentation sites, and create comprehensive reports.
-
-**Example Usage:**
-```
-"Research documentation on ElizaOS plugin development"
-"Research the TypeScript compiler API and create a comprehensive guide"
-```
-
-**Capabilities:**
-- Browses multiple documentation sources
-- Extracts key information
-- Creates structured markdown reports
-- Tracks research progress with TODOs
-
-### 2. GitHub Repository Analysis
-The agent analyzes trending repositories or specific projects, examining code structure and best practices.
-
-**Example Usage:**
-```
-"Analyze trending GitHub repositories in TypeScript"
-"Analyze repository https://github.com/microsoft/TypeScript"
-```
-
-**Capabilities:**
-- Browses GitHub trending pages
-- Clones repositories locally
-- Analyzes project structure
-- Creates detailed analysis reports
-
-### 3. System Health Monitoring
-The agent performs system health checks and creates maintenance tasks for issues.
-
-**Example Usage:**
-```
-"Check system health status"
-"Perform comprehensive system health check with recommendations"
-```
-
-**Capabilities:**
-- Monitors disk, memory, and CPU usage
-- Identifies resource bottlenecks
-- Creates cleanup tasks when needed
-- Generates health reports
-
-### 4. Learning Path Execution
-The agent follows programming tutorials, executes examples, and tracks learning progress.
-
-**Example Usage:**
-```
-"Learn React programming tutorial"
-"Study TypeScript programming basics"
-```
-
-**Capabilities:**
-- Follows online tutorials step-by-step
-- Executes code examples locally
-- Takes notes on key concepts
-- Tracks progress with learning milestones
-
-### Using Scenarios
-
-To enable scenarios in your autonomous agent:
-
-```typescript
-import { autoPlugin } from "@elizaos/plugin-auto";
-import { scenariosPlugin } from "@elizaos/plugin-auto/scenarios";
-import { shellPlugin } from "@elizaos/plugin-shell";
-import { browserbasePlugin } from "@elizaos/plugin-browserbase";
+import { autoPlugin } from "@elizaos/plugin-autonomy";
 import { todoPlugin } from "@elizaos/plugin-todo";
+import { browserPlugin } from "@elizaos/plugin-browser";
+import { shellPlugin } from "@elizaos/plugin-shell";
 
 const agent = new Agent({
   plugins: [
     autoPlugin,
-    scenariosPlugin,
-    shellPlugin,
-    browserbasePlugin,
-    todoPlugin
-  ],
+    todoPlugin,    // For task management
+    browserPlugin, // For web interactions
+    shellPlugin    // For system operations
+  ]
 });
 ```
 
-## Architecture
+## How It Works
+
+### The OODA Loop
+
+1. **Observe Phase**
+   - Monitors active tasks and TODOs
+   - Checks system resource status
+   - Reviews recent messages and interactions
+   - Tracks goal progress
+
+2. **Orient Phase**
+   - Analyzes observations for patterns
+   - Updates environmental factors
+   - Adjusts goal priorities
+   - Identifies opportunities and constraints
+
+3. **Decide Phase**
+   - Makes urgent decisions for critical issues
+   - Plans goal-based actions
+   - Considers resource constraints
+   - Evaluates alternatives
+
+4. **Act Phase**
+   - Executes chosen actions with timeouts
+   - Manages concurrent operations
+   - Tracks resource usage
+   - Handles errors gracefully
+
+5. **Reflect Phase**
+   - Calculates success metrics
+   - Updates historical context
+   - Adjusts strategies based on outcomes
+   - Learns from successes and failures
+
+### Adaptive Behavior
+
+The agent adapts its behavior based on:
+- **Error rates**: Reduces concurrent actions if errors are high
+- **Resource efficiency**: Increases activity when resources are available
+- **Decision frequency**: Adjusts cycle time based on workload
+- **Goal progress**: Reprioritizes based on achievement
+
+## Logging
+
+### File Logging Structure
+
+When file logging is enabled, each OODA run creates a detailed log file:
 
 ```
-┌─────────────────────┐
-│  Autonomous Loop    │
-│  (service.ts)       │
-└──────────┬──────────┘
-           │ Sends prompts
-           ▼
-┌─────────────────────┐
-│  Event Handler      │
-│  (index.ts)         │
-└──────────┬──────────┘
-           │ Processes
-           ▼
-┌─────────────────────┐
-│  Response Generator │
-│  (XML Template)     │
-└──────────┬──────────┘
-           │ Outputs
-           ▼
-┌─────────────────────┐
-│  Actions/Providers  │
-│  (reflect.ts, etc)  │
-└─────────────────────┘
+logs/autonomy/
+├── run_abc123_2024-01-20T10-30-00.log
+├── run_def456_2024-01-20T10-35-00.log
+└── ...
+```
+
+### Log Format
+
+```json
+{
+  "runId": "abc123",
+  "timestamp": 1705749000000,
+  "level": "INFO",
+  "phase": "DECIDING",
+  "message": "Completed decision phase",
+  "data": {
+    "decisionCount": 2,
+    "types": ["CONTINUE_TASK", "SYSTEM_HEALTH_CHECK"]
+  }
+}
+```
+
+### Viewing Logs
+
+Use the included log viewer (coming soon) or parse JSON logs:
+
+```bash
+# View latest run
+cat logs/autonomy/run_* | tail -n 100 | jq '.'
+
+# Filter by phase
+cat logs/autonomy/run_* | jq 'select(.phase == "DECIDING")'
+
+# Check errors
+cat logs/autonomy/run_* | jq 'select(.level == "ERROR")'
+```
+
+## Available Actions
+
+### Documentation Research
+```
+"Research documentation on [topic]"
+```
+- Browses documentation sites
+- Extracts key information
+- Creates structured reports
+
+### GitHub Analysis
+```
+"Analyze trending GitHub repositories in [language]"
+"Analyze repository https://github.com/owner/repo"
+```
+- Explores trending repositories
+- Clones and analyzes code
+- Creates analysis summaries
+
+### System Health
+```
+"Check system health"
+```
+- Monitors CPU, memory, disk usage
+- Creates maintenance tasks
+- Generates health reports
+
+### Learning Paths
+```
+"Learn [technology] programming tutorial"
+```
+- Follows online tutorials
+- Executes code examples
+- Tracks learning progress
+
+## Testing
+
+### Run Tests
+
+```bash
+# Run all tests including OODA loop tests
+npm test
+
+# Run only E2E tests
+npm run test:e2e
+```
+
+### Test Categories
+
+1. **Unit Tests**: Component isolation tests
+2. **E2E Tests**: Full OODA loop integration
+3. **Scenario Tests**: Real-world task execution
+4. **Performance Tests**: Resource usage and adaptation
+
+## Development
+
+### Adding Custom Goals
+
+```typescript
+const customGoals = [
+  {
+    id: generateId(),
+    description: "Monitor competitor activity",
+    priority: 1,
+    progress: 0,
+    subGoals: [
+      // Optional sub-goals
+    ]
+  }
+];
+
+// Pass in character settings
+const character = {
+  settings: {
+    goals: customGoals
+  }
+};
+```
+
+### Custom Actions
+
+Implement actions that the OODA loop can execute:
+
+```typescript
+const customAction: Action = {
+  name: "CUSTOM_ANALYSIS",
+  description: "Performs custom analysis",
+  validate: async (runtime, message) => {
+    // Validation logic
+    return true;
+  },
+  handler: async (runtime, message, state, options, callback) => {
+    // Action implementation
+    callback({
+      text: "Analysis complete",
+      actions: ["CUSTOM_ANALYSIS"],
+    });
+  }
+};
 ```
 
 ## Troubleshooting
 
-### Agent Not Starting Autonomous Loop
-- Check that the plugin is properly imported and added to the agent configuration
-- Verify environment variables are set correctly
-- Look for initialization logs: `[AutonomousService] Starting autonomous service...`
+### Agent Not Making Decisions
+- Check if tasks exist with appropriate tags
+- Verify goal configuration
+- Enable DEBUG logging to see OODA phases
 
-### Loop Running Too Fast/Slow
-- Adjust `AUTONOMOUS_LOOP_INTERVAL` environment variable
-- Default is 1000ms (1 second) if not specified
+### High Resource Usage
+- Adjust `AUTONOMOUS_MAX_CONCURRENT`
+- Increase `AUTONOMOUS_LOOP_INTERVAL`
+- Check for resource-intensive actions
 
-### Memory/Performance Issues
-- For long-running agents, monitor memory usage
-- Consider implementing cleanup in extended autonomous sessions
-- Adjust conversation length limits if needed
+### Missing Dependencies
+- Ensure required plugins are installed
+- Check for `getTasks` method availability
+- Review error logs for missing methods
+
+## Future Roadmap
+
+- [ ] Web UI for monitoring OODA cycles
+- [ ] Cypress-based frontend testing
+- [ ] Advanced learning algorithms
+- [ ] Multi-agent coordination
+- [ ] Plugin-specific goal templates
+- [ ] Real-time metrics dashboard
 
 ## Contributing
 
-Contributions are welcome! Please ensure:
-- Tests pass with `npm test`
-- Code follows existing patterns
-- Documentation is updated for new features
+Contributions are welcome! Please read our contributing guidelines and submit pull requests to our repository.
 
 ## License
 

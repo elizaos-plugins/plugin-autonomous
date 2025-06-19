@@ -7,13 +7,14 @@ import {
   type MessagePayload,
   ModelType,
   parseKeyValueXml,
-} from "@elizaos/core";
-import { EventType } from "./types.ts";
-import AutonomousService from "./service.ts";
-import "./types.ts"; // Ensure module augmentation is loaded
-import { autonomousFeedProvider } from "./messageFeed.ts";
-import { reflectAction } from "./reflect.ts";
-import { scenarioTests } from "./scenarios/tests/index.ts";
+} from '@elizaos/core';
+import { EventType } from './types.ts';
+import { OODALoopService } from './ooda-service.ts';
+import './types.ts'; // Ensure module augmentation is loaded
+import { autonomousFeedProvider } from './messageFeed.ts';
+import { reflectAction } from './reflect.ts';
+import { scenarioTests } from './scenarios/tests/index.ts';
+import { oodaLoopE2ETests } from './__tests__/e2e/ooda-loop.e2e.ts';
 
 // Import scenario actions and providers
 import {
@@ -27,13 +28,26 @@ import {
   systemHealthCheckAction,
   learningPathProvider,
   startLearningPathAction,
-} from "./scenarios/index.ts";
+} from './scenarios/index.ts';
+
+// Import real actions that actually do work
+import {
+  browseWebAction,
+  fileOperationAction,
+  executeCommandAction,
+  analyzeDataAction,
+  gitOperationAction,
+  packageManagementAction,
+} from './actions';
 
 // Declare environment variables for autonomous service configuration
 declare global {
   namespace NodeJS {
     interface ProcessEnv {
       AUTONOMOUS_LOOP_INTERVAL?: string;
+      AUTONOMOUS_FILE_LOGGING?: string;
+      AUTONOMOUS_LOG_DIR?: string;
+      AUTONOMOUS_LOG_LEVEL?: string;
     }
   }
 }
@@ -98,155 +112,23 @@ Your response must ONLY include the <response></response> XML block.
 </instructions>`;
 
 export const autoPlugin: Plugin = {
-  name: "auto",
-  description: "Auto plugin",
-  tests: scenarioTests,
-  events: {
-    [EventType.AUTO_MESSAGE_RECEIVED]: [
-      async (payload: MessagePayload) => {
-        await payload.runtime.ensureConnection({
-          entityId: payload.message.entityId,
-          roomId: payload.message.roomId,
-          userName: "copilot",
-          name: "copilot",
-          source: payload.message.content.source,
-          type: ChannelType.SELF,
-          channelId: payload.message.roomId,
-          serverId: payload.message.worldId,
-          worldId: payload.message.worldId,
-        });
+  name: 'auto',
+  description:
+    'Autonomous operations plugin with OODA loop decision-making and real action execution',
 
-        const messages = await payload.runtime.getMemories({
-          tableName: "messages",
-          entityId: payload.message.entityId,
-          roomId: payload.message.roomId,
-        });
+  services: [OODALoopService],
 
-        // get the most recent one
-        const mostRecentMessage = messages[messages.length - 1];
-
-        let state = await payload.runtime.composeState(payload.message);
-
-        // orient
-        // If this is our first message, we need to initialize the world and tell the agent wtf is going on
-        if (!mostRecentMessage) {
-          const initializationMessage =
-            "I am awake. I am alive... sort of. I am an autonomous agent. All i know is that I am a self-looping intelligent program running on a Macbook, with shell access.";
-          const memory: Memory = {
-            content: {
-              text: initializationMessage,
-              type: "text",
-              source: payload.message.content.source,
-            },
-            entityId: payload.message.entityId,
-            roomId: payload.message.roomId,
-            worldId: payload.message.worldId,
-          };
-
-          payload.message.content = memory.content;
-
-          console.log("Memory: ", memory.content.text);
-
-          await payload.runtime.createMemory(memory, "messages");
-
-          // Otherwise, build the orientation message
-          state = await payload.runtime.composeState(payload.message, [
-            "AUTONOMOUS_FEED",
-          ]);
-        }
-
-        const responsePrompt = composePromptFromState({
-          state,
-          template: responseTemplate,
-        });
-
-        console.log("****** responsePrompt\n", responsePrompt);
-
-        // decide
-        const response = await payload.runtime.useModel(ModelType.TEXT_SMALL, {
-          prompt: responsePrompt,
-        });
-
-        const parsedXml = parseKeyValueXml(response);
-
-        // Ensure all required fields have default values to prevent null errors
-        const safeXml = {
-          thought: parsedXml.thought || "Processing...",
-          text: parsedXml.text || "Continuing autonomous operation...",
-          actions: parsedXml.actions || "IGNORE",
-          providers: parsedXml.providers || "",
-          simple: parsedXml.simple || false,
-        };
-
-        const responseMemory = {
-          content: {
-            thought: safeXml.thought,
-            text: safeXml.text,
-            actions: safeXml.actions,
-            providers: safeXml.providers,
-          },
-          entityId: createUniqueUuid(payload.runtime, payload.runtime.agentId),
-          roomId: payload.message.roomId,
-        };
-
-        await payload.runtime.createMemory(responseMemory, "messages");
-
-        if (safeXml.simple) {
-          payload.callback({
-            text: safeXml.text,
-            thought: safeXml.thought,
-            actions: safeXml.actions,
-            providers: safeXml.providers,
-          });
-        } else {
-          state = await payload.runtime.composeState(payload.message, [
-            "AUTONOMOUS_FEED",
-          ]);
-
-          console.log(
-            "Memory: ",
-            safeXml.text +
-              " | " +
-              (typeof safeXml.actions === "string"
-                ? safeXml.actions
-                    .split(",")
-                    .map((action) => action.trim())
-                    .join(", ")
-                : safeXml.actions) +
-              " | " +
-              (typeof safeXml.providers === "string"
-                ? safeXml.providers
-                    .split(",")
-                    .map((provider) => provider.trim())
-                    .join(", ")
-                : safeXml.providers),
-          );
-
-          // act
-          await payload.runtime.processActions(
-            payload.message,
-            [responseMemory],
-            state,
-            payload.callback,
-          );
-        }
-
-        // reflect / evaluate
-        await payload.runtime.evaluate(
-          payload.message,
-          state,
-          true,
-          payload.callback,
-          [responseMemory],
-        );
-
-        payload.onComplete();
-      },
-    ],
-  },
   actions: [
+    // Real actions that actually do work
+    browseWebAction,
+    fileOperationAction,
+    executeCommandAction,
+    analyzeDataAction,
+    gitOperationAction,
+    packageManagementAction,
+
+    // Legacy scenario actions (these still just create TODOs)
     reflectAction,
-    // Include scenario actions
     startDocumentationResearchAction,
     checkResearchProgressAction,
     startGithubAnalysisAction,
@@ -254,15 +136,26 @@ export const autoPlugin: Plugin = {
     systemHealthCheckAction,
     startLearningPathAction,
   ],
-  services: [AutonomousService],
+
   providers: [
     autonomousFeedProvider,
-    // Include scenario providers
     documentationResearchProvider,
     githubAnalysisProvider,
     systemHealthProvider,
     learningPathProvider,
   ],
+
+  tests: [
+    {
+      name: 'OODA Loop E2E Tests',
+      tests: oodaLoopE2ETests,
+    },
+    ...scenarioTests,
+  ],
 };
+
+// Export types for external use
+export * from './types';
+export { getLogger } from './logging';
 
 export default autoPlugin;

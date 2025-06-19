@@ -55,5 +55,6 @@ temp/
 .elizadb/
 pglite/
 cache/
-
+.turbo/
 .cursor
+docs/
